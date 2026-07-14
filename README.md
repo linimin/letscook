@@ -61,6 +61,9 @@ Plan mode → Save to workspace → /worktree <task> → /cook
 | MCP `letscook` | `mcp.json` + `scripts/start-letscook-mcp.sh` |
 | **6 completion agents** | `agents/completion-*.md` |
 | Skill `cursor-worktree-cook` | `skills/cursor-worktree-cook/` |
+| Skill `cursor-handoff-synthesis` | `skills/cursor-handoff-synthesis/` |
+| Skill `cook-handoff-boundary` | `skills/cook-handoff-boundary/` |
+| Skill `completion-protocol` | `skills/completion-protocol/` |
 | Skill `cursor-handoff` | `skills/cursor-handoff/` |
 | Skill `cursor-orchestrator` | `skills/cursor-orchestrator/` |
 | Skill `cursor-plan-handoff` | `skills/cursor-plan-handoff/` |

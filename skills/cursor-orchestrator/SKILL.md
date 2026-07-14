@@ -20,15 +20,16 @@ Use when the user wants a pi-letscook-style long-running workflow **without Pi**
 
 ## Loop (primary agent)
 
-1. `resolve_cook_workspace({ mode: "auto" })` → `prepare_cook_handoff` → `confirm_cook_handoff` → orchestrator loop
-2. `get_workflow_dispatch({ workspace_root })`
-3. If `dispatch_allowed`, **invoke the bundled agent** named `cursor_agent`:
+1. `resolve_cook_workspace({ mode: "auto" })` → `synthesize_cook_handoff` → `prepare_cook_handoff` → `confirm_cook_handoff` → orchestrator loop
+2. Load **`completion-protocol`** skill while orchestrating; follow mandatory dispatch from `get_workflow_dispatch`
+3. `get_workflow_dispatch({ workspace_root })`
+4. If `dispatch_allowed`, **invoke the bundled agent** named `cursor_agent`:
    - Use Task / subagent delegation targeting that agent name
    - Include `system_context` + `task_prompt` from dispatch
-4. `submit_role_result({ workspace_root, role, raw_output })` with the agent's full final report
-5. Repeat from step 2 until `workflow_closed` or user parks/cancels
-6. `finish_cook_workflow` → guide `/apply-worktree` and `/delete-worktree`
-7. Use `cursor-orchestrator-monitor` when the user asks for status
+5. `submit_role_result({ workspace_root, role, raw_output })` with the agent's full final report
+6. Repeat from step 3 until `workflow_closed` or user parks/cancels
+7. `finish_cook_workflow` → guide `/apply-worktree` and `/delete-worktree`
+8. Use `cursor-orchestrator-monitor` when the user asks for status
 
 ## Rules
 

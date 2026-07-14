@@ -8,6 +8,12 @@ import {
 	missionFromSnapshot,
 	updateWorkflowState,
 } from "../control-plane/state.ts";
+import { mandatoryNextRoleAfterCompletion, resolveMandatoryDispatch } from "./mandatory-dispatch.ts";
+import {
+	parseReportFields,
+	stopJudgeHistoryRecord,
+	validateRoleReport,
+} from "./role-transcription.ts";
 
 const ROLE_SET = new Set<string>([
 	"completion-bootstrapper",
@@ -41,6 +47,9 @@ function buildRoleSystemContext(snapshot: WorkflowSnapshot, role: CompletionRole
 		`Mission anchor: ${mission}`,
 		`Task type: ${asString(snapshot.state.task_type) ?? "completion-workflow"}`,
 		`Evaluation profile: ${asString(snapshot.state.evaluation_profile) ?? "completion-rubric-v1"}`,
+		"",
+		"Follow completion-protocol mandatory dispatch and rubric transcription rules.",
+		"Load the completion-protocol skill from the letscook plugin when executing this role.",
 		"",
 		"Canonical files to re-read before acting:",
 		"- .agent/current/state.json",
@@ -135,16 +144,24 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 
 	const role = readRoleFromState(snapshot);
 	if (!role) {
+		const mandatory = resolveMandatoryDispatch(snapshot);
+		if (mandatory.role) {
+			await updateWorkflowState(workspaceRoot, {
+				next_mandatory_role: mandatory.role,
+				next_mandatory_action: mandatory.action,
+			});
+			return getWorkflowDispatch(workspaceRoot);
+		}
 		return {
 			workspace_root: workspaceRoot,
 			role: null,
 			dispatch_allowed: false,
-			reason: "missing_next_mandatory_role",
+			reason: mandatory.reason,
 			system_context: "",
 			task_prompt: "",
 			cursor_agent: "",
 			subagent_type: "generalPurpose",
-			next_steps: ["Inspect .agent/current/state.json and repair next_mandatory_role"],
+			next_steps: ["Inspect .agent/current/state.json continuation_policy and blockers"],
 		};
 	}
 
@@ -167,47 +184,8 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 	};
 }
 
-function parseReportFields(rawOutput: string): JsonRecord {
-	const fields: JsonRecord = {};
-	const patterns: Array<[string, RegExp]> = [
-		["role", /^role:\s*(.+)$/im],
-		["verdict", /^verdict:\s*(.+)$/im],
-		["outcome", /^outcome:\s*(.+)$/im],
-		["summary", /^summary:\s*(.+)$/im],
-		["recommended_next_role", /^recommended_next_role:\s*(.+)$/im],
-	];
-	for (const [key, pattern] of patterns) {
-		const match = rawOutput.match(pattern);
-		if (match?.[1]) fields[key] = match[1].trim();
-	}
-	return fields;
-}
-
-function defaultNextRoleAfter(role: CompletionRole, snapshot: WorkflowSnapshot): CompletionRole | null {
-	switch (role) {
-		case "completion-bootstrapper":
-			return "completion-regrounder";
-		case "completion-regrounder": {
-			const activeStatus = asString(snapshot.active.status)?.toLowerCase();
-			if (activeStatus === "selected" || activeStatus === "in_progress") return "completion-implementer";
-			if (snapshot.state.requires_reground === true || asString(snapshot.state.current_phase) === "reground") {
-				return "completion-implementer";
-			}
-			const remaining = typeof snapshot.state.remaining_stop_judges === "number" ? snapshot.state.remaining_stop_judges : 0;
-			if (remaining > 0) return "completion-stop-judge";
-			return null;
-		}
-		case "completion-implementer":
-			return "completion-reviewer";
-		case "completion-reviewer":
-			return "completion-auditor";
-		case "completion-auditor":
-			return "completion-regrounder";
-		case "completion-stop-judge":
-			return "completion-regrounder";
-		default:
-			return "completion-regrounder";
-	}
+function parseReportFieldsFromOutput(rawOutput: string): JsonRecord {
+	return parseReportFields(rawOutput);
 }
 
 function applyRoleCompletionState(
@@ -219,21 +197,34 @@ function applyRoleCompletionState(
 		last_completed_role: role,
 		last_role_completed_at: new Date().toISOString(),
 	};
-	let nextRole = defaultNextRoleAfter(role, snapshot);
-	const advisory = asString(reportFields.recommended_next_role);
-	if (isCompletionRole(advisory)) nextRole = advisory;
+	let nextRole = mandatoryNextRoleAfterCompletion(role, snapshot, reportFields);
 
 	if (role === "completion-stop-judge") {
 		const remaining = typeof snapshot.state.remaining_stop_judges === "number" ? snapshot.state.remaining_stop_judges : 2;
 		const nextRemaining = Math.max(0, remaining - 1);
 		patch.remaining_stop_judges = nextRemaining;
-		if (nextRemaining > 0 && (asString(reportFields.verdict)?.toLowerCase() !== "can_stop")) {
+		const verdict = asString(reportFields.verdict)?.toLowerCase() ?? asString(reportFields["Can the project stop now"])?.toLowerCase();
+		if (nextRemaining > 0 && verdict !== "can_stop" && !verdict?.startsWith("yes")) {
+			nextRole = "completion-stop-judge";
+		} else if (nextRemaining > 0) {
 			nextRole = "completion-stop-judge";
 		}
 	}
 
 	if (role === "completion-implementer") {
 		patch.current_phase = "review";
+		patch.requires_reground = false;
+	}
+
+	if (role === "completion-regrounder") {
+		patch.requires_reground = false;
+		patch.last_reground_at = new Date().toISOString();
+		const activeStatus = asString(snapshot.active.status)?.toLowerCase();
+		if (activeStatus === "selected" || activeStatus === "in_progress") {
+			nextRole = "completion-implementer";
+		} else if (snapshot.state.requires_reground === true || asString(snapshot.state.current_phase) === "reground") {
+			nextRole = "completion-implementer";
+		}
 	}
 
 	if (!nextRole) {
@@ -245,8 +236,9 @@ function applyRoleCompletionState(
 		return patch;
 	}
 
-	patch.next_mandatory_role = nextRole;
-	patch.next_mandatory_action = `Dispatch ${nextRole}`;
+	const mandatory = resolveMandatoryDispatch({ ...snapshot, state: { ...snapshot.state, ...patch } });
+	patch.next_mandatory_role = nextRole ?? mandatory.role;
+	patch.next_mandatory_action = mandatory.action ?? `Dispatch ${patch.next_mandatory_role}`;
 	patch.continuation_policy = "continue";
 	return patch;
 }
@@ -272,9 +264,13 @@ export async function submitRoleResult(input: SubmitRoleResultInput): Promise<Js
 	}
 
 	const reportFields = {
-		...parseReportFields(input.raw_output),
+		...parseReportFieldsFromOutput(input.raw_output),
 		...(input.structured ?? {}),
 	};
+	const transcriptionErrors = validateRoleReport(input.role, input.raw_output, reportFields as Record<string, string>);
+	if (transcriptionErrors.length > 0 && input.ok !== false) {
+		throw new Error(`role report failed transcription: ${transcriptionErrors.join("; ")}`);
+	}
 	const transcript = {
 		event_id: randomUUID(),
 		timestamp: new Date().toISOString(),
@@ -285,6 +281,14 @@ export async function submitRoleResult(input: SubmitRoleResultInput): Promise<Js
 		report_fields: reportFields,
 	};
 	await appendJsonl(snapshot.files.sliceHistoryPath, transcript);
+	const stopRecord = stopJudgeHistoryRecord({
+		role: input.role,
+		reportFields: reportFields as Record<string, string>,
+		waveId: typeof snapshot.state.current_stop_wave_id === "number" ? snapshot.state.current_stop_wave_id : 0,
+	});
+	if (stopRecord) {
+		await appendJsonl(snapshot.files.stopHistoryPath, stopRecord);
+	}
 	await appendJsonl(snapshot.files.workflowEventsPath, {
 		event_id: randomUUID(),
 		timestamp: new Date().toISOString(),

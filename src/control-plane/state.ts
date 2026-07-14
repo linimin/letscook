@@ -3,6 +3,11 @@ import * as fs from "node:fs";
 import { promises as fsp } from "node:fs";
 import * as path from "node:path";
 import type { AgentPaths, JsonRecord, WorkflowSnapshot } from "../types.ts";
+import {
+	buildVerifyControlPlaneScript,
+	buildVerifyStopScript,
+	detectVerifierCommand,
+} from "./verify-scripts.ts";
 
 const PROTOCOL_ID = "completion";
 const DEFAULT_TASK_TYPE = "completion-workflow";
@@ -97,10 +102,19 @@ export function defaultState(missionAnchor: string, routing?: { taskType?: strin
 		evaluation_profile: routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
 		requires_reground: true,
 		slices_since_last_reground: 0,
+		remaining_release_blockers: null,
+		remaining_high_value_gaps: null,
+		unsatisfied_contract_ids: [],
+		release_blocker_ids: [],
 		next_mandatory_action: "Reconcile canonical state from current repo truth",
 		next_mandatory_role: "completion-regrounder",
 		remaining_stop_judges: DEFAULT_REQUIRED_STOP_JUDGES,
 		current_stop_wave_id: 0,
+		last_reground_at: null,
+		last_auditor_verdict: null,
+		contract_status: "unknown",
+		latest_completed_slice: null,
+		latest_verified_slice: null,
 		orchestrator: "letscook-mcp",
 	};
 }
@@ -111,6 +125,7 @@ export function defaultPlan(missionAnchor: string, routing?: { taskType?: string
 		mission_anchor: missionAnchor,
 		task_type: routing?.taskType ?? DEFAULT_TASK_TYPE,
 		evaluation_profile: routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
+		last_reground_at: null,
 		plan_basis: "letscook-handoff",
 		candidate_slices: [],
 	};
@@ -127,9 +142,17 @@ export function defaultActiveSlice(missionAnchor: string, routing?: { taskType?:
 		goal: null,
 		contract_ids: [],
 		acceptance_criteria: [],
+		priority: null,
+		why_now: null,
+		blocked_on: [],
+		locked_notes: [],
+		must_fix_findings: [],
 		implementation_surfaces: [],
 		verification_commands: [],
 		basis_commit: null,
+		remaining_contract_ids_before: [],
+		release_blocker_count_before: null,
+		high_value_gap_count_before: null,
 	};
 }
 
@@ -138,18 +161,37 @@ export function defaultStartupBrief(
 	handoff: JsonRecord,
 	routing?: { taskType?: string; evaluationProfile?: string },
 ): JsonRecord {
+	const capturedAt = asString(handoff.captured_at) ?? new Date().toISOString();
 	return {
 		schema_version: 1,
 		artifact_type: "completion-startup-brief",
-		captured_at: asString(handoff.captured_at) ?? new Date().toISOString(),
+		source: asString(handoff.source) ?? "letscook-mcp",
+		confirmed: true,
+		confirmed_at: capturedAt,
 		mission_anchor: missionAnchor,
 		mission: asString(handoff.mission) ?? missionAnchor,
+		goal_text: asString(handoff.goal_text) ?? `Mission: ${missionAnchor}`,
 		scope: asStringArray(handoff.scope),
 		constraints: asStringArray(handoff.constraints),
 		non_goals: asStringArray(handoff.non_goals),
 		acceptance: asStringArray(handoff.acceptance),
 		risks: asStringArray(handoff.risks),
-		notes: asStringArray(handoff.notes),
+		notes:
+			asStringArray(handoff.notes).length > 0
+				? asStringArray(handoff.notes)
+				: ["No additional startup notes were preserved for this workflow entry."],
+		first_slice_goal_hint: asString(handoff.first_slice_goal),
+		first_slice_non_goals_hint: asStringArray(handoff.first_slice_non_goals),
+		implementation_surfaces_hint: asStringArray(handoff.implementation_surfaces),
+		verification_commands_hint: asStringArray(handoff.verification_commands),
+		why_this_slice_first_hint: asString(handoff.why_this_slice_first),
+		verification_truth_mode: asString(handoff.verification_truth_mode),
+		deterministic_verifier_ready:
+			typeof handoff.deterministic_verifier_ready === "boolean" ? handoff.deterministic_verifier_ready : undefined,
+		verification_latency: asString(handoff.verification_latency),
+		verification_noise_risk: asString(handoff.verification_noise_risk),
+		verifier_gap: asString(handoff.verifier_gap),
+		recommended_first_slice_kind: asString(handoff.recommended_first_slice_kind),
 		task_type: routing?.taskType ?? DEFAULT_TASK_TYPE,
 		evaluation_profile: routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
 		why_cook_now: asString(handoff.why_cook_now),
@@ -158,11 +200,31 @@ export function defaultStartupBrief(
 }
 
 export function defaultVerificationEvidence(missionAnchor: string): JsonRecord {
+	const idleSummary =
+		"No deterministic verification evidence is recorded yet because no selected slice or current-HEAD verification subject exists.";
 	return {
 		schema_version: 1,
+		artifact_type: "completion-verification-evidence",
 		mission_anchor: missionAnchor,
+		subject_type: "none",
+		slice_id: null,
+		goal: null,
+		contract_ids: [],
 		basis_commit: null,
+		head_sha: null,
 		verification_commands: [],
+		outcome: "not_recorded",
+		recorded_at: null,
+		evidence_quality: { status: "not_recorded", summary: idleSummary },
+		command_results: [],
+		acceptance_coverage: [],
+		flake_signals: [],
+		open_gaps: [],
+		basis_regression_required: false,
+		basis_regression_status: "not_applicable",
+		basis_regression_reason: "No selected slice or current-HEAD verification subject exists yet.",
+		basis_regression_artifact_paths: [],
+		summary: idleSummary,
 		evidence: [],
 	};
 }
@@ -203,9 +265,19 @@ export async function scaffoldWorkflowFromHandoff(
 	const startupBrief = defaultStartupBrief(mission, handoff, routing);
 	const verificationEvidence = defaultVerificationEvidence(mission);
 	const profile = defaultProfileRecord(projectName);
+	const verifierCommand = await detectVerifierCommand(root);
+	const stopScriptPath = path.join(files.agentDir, "verify_completion_stop.sh");
+	const controlPlaneScriptPath = path.join(files.agentDir, "verify_completion_control_plane.sh");
 
 	await fsp.mkdir(files.currentDir, { recursive: true });
 	await fsp.mkdir(files.tmpDir, { recursive: true });
+	await fsp.mkdir(files.agentDir, { recursive: true });
+	await fsp.writeFile(stopScriptPath, buildVerifyStopScript(verifierCommand), "utf8");
+	await fsp.writeFile(controlPlaneScriptPath, buildVerifyControlPlaneScript(), "utf8");
+	await fsp.chmod(stopScriptPath, 0o755);
+	await fsp.chmod(controlPlaneScriptPath, 0o755);
+	await fsp.writeFile(files.sliceHistoryPath, "", "utf8");
+	await fsp.writeFile(files.stopHistoryPath, "", "utf8");
 	await writeJsonFile(files.statePath, state);
 	await writeJsonFile(files.planPath, plan);
 	await writeJsonFile(files.activePath, active);
