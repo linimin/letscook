@@ -44,14 +44,14 @@ On first MCP start, dependencies install automatically.
 
 ```text
 Plan mode → Save to workspace → /worktree <task> → /cook
-  → handoff confirm → orchestrator loop → /apply-worktree → /delete-worktree
+  → synthesize handoff → confirm → orchestrator loop → /apply-worktree → /delete-worktree
 ```
 
 | Step | What |
 |------|------|
 | Plan | `.cursor/plans/*.plan.md` — do **not** use Build locally |
 | Isolate | Cursor `/worktree` (required before `/cook`) |
-| Cook | `/cook` → `resolve_cook_workspace` → handoff → 6-role loop |
+| Cook | `/cook` → `resolve_cook_workspace` → `synthesize_cook_handoff` → confirm → 6-role loop |
 | Finish | `finish_cook_workflow` → `/apply-worktree` → `/delete-worktree` |
 
 ## Bundled resources
@@ -75,7 +75,8 @@ Plan mode → Save to workspace → /worktree <task> → /cook
 | `resolve_cook_workspace` | Pick `workspace_root` for `/cook` |
 | `finish_cook_workflow` | Apply/delete guidance when done |
 | `prepare_cook_handoff` / `confirm_cook_handoff` / `start_cook_workflow` | Handoff + native confirm UI + scaffold `.agent/` |
-| `list_cursor_plans` / `preview_plan_to_cook_handoff` | Plan → cook_handoff |
+| `get_handoff_synthesis_prompt` / `submit_startup_analysis` / `synthesize_cook_handoff` / `validate_cook_handoff` | Startup synthesis (pi parity, fail-closed) |
+| `list_cursor_plans` / `preview_plan_to_cook_handoff` | Plan → synthesis input |
 | `get_workflow_dispatch` / `submit_role_result` | Orchestrator loop |
 
 ## Development

@@ -11,6 +11,12 @@ import {
 	writeCookHandoffFile,
 } from "../handoff/capsule.ts";
 import { confirmCookHandoff, formatConfirmationBrief } from "../handoff/confirmation.ts";
+import {
+	getHandoffSynthesisPrompt,
+	submitStartupAnalysis,
+	synthesizeCookHandoff,
+	validateCookHandoffTool,
+} from "../handoff/synthesize.ts";
 import { cancelCookHandoff, startCookWorkflowFromHandoff } from "../handoff/start-workflow.ts";
 import type { LetscookToolContext } from "./context.ts";
 import {
@@ -182,6 +188,63 @@ export async function handleLetscookTool(
 			}
 			case "get_cook_handoff_schema":
 				return textResult({ ok: true, example: COOK_HANDOFF_SCHEMA_EXAMPLE });
+			case "get_handoff_synthesis_prompt":
+				return textResult(
+					getHandoffSynthesisPrompt({
+						workspace_root: typeof args.workspace_root === "string" ? args.workspace_root : undefined,
+						project_name: typeof args.project_name === "string" ? args.project_name : undefined,
+						discussion_summary: typeof args.discussion_summary === "string" ? args.discussion_summary : undefined,
+						inline_intent: typeof args.inline_intent === "string" ? args.inline_intent : undefined,
+						workflow_context_lines: Array.isArray(args.workflow_context_lines)
+							? args.workflow_context_lines.filter((v): v is string => typeof v === "string")
+							: undefined,
+					}),
+				);
+			case "submit_startup_analysis":
+				if (typeof args.structured_analysis !== "object" || args.structured_analysis === null) {
+					return toolError("structured_analysis is required", "missing_structured_analysis");
+				}
+				return textResult(
+					submitStartupAnalysis({
+						project_name: typeof args.project_name === "string" ? args.project_name : undefined,
+						structured_analysis: args.structured_analysis as Record<string, unknown>,
+					}),
+				);
+			case "synthesize_cook_handoff":
+				return textResult(
+					synthesizeCookHandoff({
+						workspace_root: typeof args.workspace_root === "string" ? args.workspace_root : undefined,
+						project_name: typeof args.project_name === "string" ? args.project_name : undefined,
+						discussion_summary: typeof args.discussion_summary === "string" ? args.discussion_summary : undefined,
+						inline_intent: typeof args.inline_intent === "string" ? args.inline_intent : undefined,
+						explicit_capsule:
+							typeof args.explicit_capsule === "object" && args.explicit_capsule !== null
+								? (args.explicit_capsule as Record<string, unknown>)
+								: undefined,
+						structured_analysis:
+							typeof args.structured_analysis === "object" && args.structured_analysis !== null
+								? (args.structured_analysis as Record<string, unknown>)
+								: undefined,
+						plan_capsule:
+							typeof args.plan_capsule === "object" && args.plan_capsule !== null
+								? (args.plan_capsule as Record<string, unknown>)
+								: undefined,
+						workflow_context_lines: Array.isArray(args.workflow_context_lines)
+							? args.workflow_context_lines.filter((v): v is string => typeof v === "string")
+							: undefined,
+					}),
+				);
+			case "validate_cook_handoff": {
+				if (typeof args.capsule !== "object" || args.capsule === null) {
+					return toolError("capsule is required", "missing_capsule");
+				}
+				return textResult(
+					validateCookHandoffTool(
+						args.capsule as Record<string, unknown>,
+						typeof args.project_name === "string" ? args.project_name : undefined,
+					),
+				);
+			}
 			case "list_cursor_plans": {
 				const repoRoot =
 					typeof args.repo_root === "string"

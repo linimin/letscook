@@ -9,13 +9,14 @@ Use when planning is done in Cursor and the user wants a long-running completion
 
 Requires **`cursor-worktree-cook`**: user must run Cursor `/worktree` before `/cook`.
 
-If the user saved a **Plan mode** `.plan.md`, use **`cursor-plan-handoff`** first, then continue here.
+If the user saved a **Plan mode** `.plan.md`, use **`cursor-plan-handoff`** first for plan mapping, then **`cursor-handoff-synthesis`** before prepare.
 
 ## What to do
 
 1. `get_cook_workspace_context` — must be `ready_for_cook: true`
 2. `resolve_cook_workspace({ mode: "auto" })` — get `workspace_root`
-3. `prepare_cook_handoff` with that `workspace_root` and a valid `cook_handoff` capsule
+3. **`cursor-handoff-synthesis`**: `synthesize_cook_handoff` (or `get_handoff_synthesis_prompt` → `submit_startup_analysis`)
+4. `prepare_cook_handoff` with that `workspace_root` and the **synthesized** capsule
 4. **Confirm handoff** (see below)
 5. Switch to `cursor-orchestrator` for the dispatch loop
 6. On completion, `finish_cook_workflow` → guide `/apply-worktree` and `/delete-worktree`

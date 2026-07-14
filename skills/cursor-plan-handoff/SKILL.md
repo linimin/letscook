@@ -69,9 +69,24 @@ Show in chat:
 - `mapping_notes` and `gaps` (if any)
 - `suggested_slug` / `suggested_branch`
 
-If `gaps` is non-empty, fix with `overrides` or ask the user to edit the plan, then re-preview. Do **not** prepare until `ok: true`.
+If `gaps` is non-empty, fix with `overrides` or ask the user to edit the plan, then re-preview. Do **not** prepare until synthesis succeeds.
 
-### 3. Hand off to letscook (existing flow)
+### 3. Synthesize (required — plan is input only)
+
+Pass the preview `capsule` as `plan_capsule` to synthesis; it is **not** the final handoff:
+
+```text
+synthesize_cook_handoff({
+  workspace_root,
+  plan_capsule: <capsule from preview>,
+  discussion_summary: "<plan_hint + chat summary>",
+  inline_intent?: "<text after /cook>"
+})
+```
+
+If `fail_closed` or `startable: false`, clarify and rerun. Follow **`cursor-handoff-synthesis`**.
+
+### 4. Hand off to letscook (existing flow)
 
 Read **`cursor-worktree-cook`** if not already in a Cursor worktree.
 

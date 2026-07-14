@@ -33,6 +33,16 @@ function bulletLines(items: string[]): string {
 }
 
 export function formatConfirmationBrief(layout: JsonRecord): string {
+	const layoutText = asString(layout.layout_text);
+	if (layoutText) return layoutText;
+	const nested = layout.layout;
+	if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+		const intro = asString((nested as JsonRecord).intro);
+		const proposalBody = asString((nested as JsonRecord).proposalBody);
+		if (intro || proposalBody) {
+			return [intro, proposalBody].filter(Boolean).join("\n\n");
+		}
+	}
 	const lines = [
 		`**Mission:** ${asString(layout.mission) ?? "(missing)"}`,
 		"",

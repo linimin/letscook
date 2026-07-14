@@ -107,6 +107,61 @@ const TOOLS = [
 		inputSchema: { type: "object", properties: {} },
 	},
 	{
+		name: "get_handoff_synthesis_prompt",
+		description: "Return analyst prompt + contract for startup synthesis before prepare_cook_handoff",
+		inputSchema: {
+			type: "object",
+			properties: {
+				workspace_root: { type: "string" },
+				project_name: { type: "string" },
+				discussion_summary: { type: "string" },
+				inline_intent: { type: "string" },
+				workflow_context_lines: { type: "array", items: { type: "string" } },
+			},
+		},
+	},
+	{
+		name: "submit_startup_analysis",
+		description: "Validate completion.startup.analysis.v1 JSON and return startable capsule + confirmation layout",
+		inputSchema: {
+			type: "object",
+			properties: {
+				project_name: { type: "string" },
+				structured_analysis: { type: "object" },
+			},
+			required: ["structured_analysis"],
+		},
+	},
+	{
+		name: "synthesize_cook_handoff",
+		description: "Fail-closed synthesis entry: inline intent, explicit capsule, plan capsule, or structured analysis",
+		inputSchema: {
+			type: "object",
+			properties: {
+				workspace_root: { type: "string" },
+				project_name: { type: "string" },
+				discussion_summary: { type: "string" },
+				inline_intent: { type: "string" },
+				explicit_capsule: { type: "object" },
+				plan_capsule: { type: "object" },
+				structured_analysis: { type: "object" },
+				workflow_context_lines: { type: "array", items: { type: "string" } },
+			},
+		},
+	},
+	{
+		name: "validate_cook_handoff",
+		description: "Independent cook_handoff schema and startability validation",
+		inputSchema: {
+			type: "object",
+			properties: {
+				capsule: { type: "object" },
+				project_name: { type: "string" },
+			},
+			required: ["capsule"],
+		},
+	},
+	{
 		name: "list_cursor_plans",
 		description: "List Cursor Plan mode files under .cursor/plans; optional plan_hint ranks by chat context",
 		inputSchema: {

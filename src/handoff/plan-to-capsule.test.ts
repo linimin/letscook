@@ -52,7 +52,7 @@ test("planToCookHandoffDraft maps plan into startable capsule", () => {
 	const draft = planToCookHandoffDraft(plan);
 	const schema = validateCookHandoffSchema(draft.capsule);
 	assert.equal(schema.ok, true);
-	assert.equal(draft.capsule.source, "cursor_plan");
+	assert.equal(draft.capsule.source, "primary_agent");
 	assert.ok(asStringArray(draft.capsule.scope).includes("src/auth/"));
 	assert.ok(asStringArray(draft.capsule.acceptance).some((item: string) => /redirect tests pass/i.test(item)));
 	assert.equal(draft.gaps.length, 0);

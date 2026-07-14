@@ -258,7 +258,7 @@ export function planToCookHandoffDraft(
 
 	const capsule = normalizeCookHandoffCapsule({
 		kind: "cook_handoff",
-		source: "cursor_plan",
+		source: "primary_agent",
 		captured_at: new Date().toISOString(),
 		source_turn_id: path.basename(plan.path),
 		mission,
@@ -279,6 +279,13 @@ export function planToCookHandoffDraft(
 		evaluation_profile: "completion-rubric-v1",
 		why_cook_now:
 			"Cursor Plan mode produced a reviewable plan; letscook runs it with review/audit/stop gates instead of one-shot Build.",
+		first_slice_goal: pendingTodos[0]?.content ?? mission,
+		first_slice_non_goals: non_goals.length > 0 ? non_goals : ["Unrelated refactors outside the plan"],
+		implementation_surfaces: scope.length > 0 ? scope : ["<repo>"],
+		verification_commands: ["npm test"],
+		why_this_slice_first: pendingTodos[0]
+			? `First pending plan todo: ${pendingTodos[0].content}`
+			: "Establish plan-aligned foundation before broader slices",
 		...overrides,
 	});
 
@@ -579,6 +586,7 @@ export async function previewPlanToCookHandoff(args: {
 		next_steps: [
 			"Review capsule and mapping_notes with the user; edit overrides if needed",
 			"resolve_cook_workspace({ mode: auto })",
+			"synthesize_cook_handoff({ workspace_root, plan_capsule: capsule, discussion_summary })",
 			"prepare_cook_handoff({ workspace_root, capsule })",
 			"confirm_cook_handoff({ workspace_root })",
 			"Follow cursor-orchestrator for dispatch loop",

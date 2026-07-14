@@ -20,7 +20,7 @@ Plan mode → Save to workspace → /worktree <task> → /cook
 1. **`get_cook_workspace_context`** — must show `ready_for_cook: true`
 2. **Plan path** (optional): follow **`cursor-plan-handoff`** with `plan_hint` from recent chat
 3. **`resolve_cook_workspace({ mode: "auto" })`**
-4. **`prepare_cook_handoff`** → **`confirm_cook_handoff`** (MCP form or `AskQuestion` fallback) → orchestrator loop
+4. **`cursor-handoff-synthesis`**: `synthesize_cook_handoff` → **`prepare_cook_handoff`** → **`confirm_cook_handoff`** → orchestrator loop
 5. Follow **`cursor-orchestrator`** for the dispatch loop
 6. **`finish_cook_workflow`** → **`/apply-worktree`** → **`/delete-worktree`**
 

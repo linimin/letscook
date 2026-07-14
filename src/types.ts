@@ -49,10 +49,28 @@ export type CookHandoffCapsule = {
 	risks?: string[];
 	notes?: string[];
 	handoff_kind: string;
+	first_slice_goal?: string;
+	first_slice_non_goals?: string[];
+	implementation_surfaces?: string[];
+	verification_commands?: string[];
+	why_this_slice_first?: string;
+	verification_truth_mode?: string;
+	deterministic_verifier_ready?: boolean;
+	verification_latency?: string;
+	verification_noise_risk?: string;
+	verifier_gap?: string;
+	recommended_first_slice_kind?: string;
 	task_type?: string;
 	evaluation_profile?: string;
 	why_cook_now?: string;
+	reason?: string;
 };
+
+export type CookHandoffSidecarStatus =
+	| "pending_review"
+	| "confirmed"
+	| "awaiting_terminal_launch"
+	| "kickoff_started";
 
 export type CookHandoffSidecar = {
 	workspace_root: string;
@@ -61,10 +79,12 @@ export type CookHandoffSidecar = {
 	prepared_at: string;
 	confirmation_id: string;
 	handoff_sha256: string;
-	status: "pending_review" | "confirmed" | "kickoff_started";
+	status: CookHandoffSidecarStatus;
 	source: string;
 	mission_preview?: string;
 	confirmed_at?: string;
+	confirmed_by?: string;
+	last_start_error?: string;
 };
 
 export type WorkflowDispatch = {
