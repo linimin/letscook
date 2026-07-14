@@ -1,0 +1,26 @@
+{
+  "name": "@linimin/letscook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cursor-native completion workflow orchestrator MCP (pi-letscook protocol, no Pi required)",
+  "bin": {
+    "letscook-mcp": "./src/server.ts"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
