@@ -88,12 +88,13 @@ Plan mode → Save to workspace → /worktree <task> → /cook
 npm install
 npm run typecheck
 npm test
+npm run release-check
 npm run start   # MCP stdio (for manual debugging)
 ```
 
 ## Status
 
-**v0.2** — Cursor `/worktree` only (no self-managed `.worktrees/cook-*`). Dispatch simplified vs full pi-letscook `release-check`.
+**v0.3.0** — pi-letscook protocol parity: startup synthesis, confirmation layout, mandatory dispatch, rubric transcription, control-plane defaults, and `release-check` gate. Cursor-specific: `/worktree`, MCP orchestration, elicitation + AskQuestion confirm.
 
 ## License
 

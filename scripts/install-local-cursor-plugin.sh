@@ -60,7 +60,8 @@ Bundled resources:
   - MCP server: letscook
   - Agents: completion-bootstrapper, completion-regrounder, completion-implementer,
             completion-reviewer, completion-auditor, completion-stop-judge
-  - Skills: cursor-worktree-cook, cursor-plan-handoff, cursor-handoff, cursor-orchestrator, cursor-orchestrator-monitor
+  - Skills: cursor-worktree-cook, cursor-plan-handoff, cursor-handoff-synthesis, cursor-handoff,
+            cook-handoff-boundary, completion-protocol, cursor-orchestrator, cursor-orchestrator-monitor
   - Commands: cook
   - Rule: letscook-prerequisites
   - Hooks: subagentStop auto-continue (enable in project .cursor/hooks.json or copy from hooks/)

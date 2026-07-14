@@ -1,6 +1,6 @@
 {
   "name": "@linimin/letscook",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Cursor-native completion workflow orchestrator MCP (pi-letscook protocol, no Pi required)",
@@ -11,6 +11,7 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/**/*.test.ts",
+    "release-check": "bash scripts/release-check.sh",
     "install-cursor-plugin": "bash ./scripts/install-local-cursor-plugin.sh"
   },
   "dependencies": {
