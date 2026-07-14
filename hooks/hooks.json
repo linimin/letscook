@@ -10,6 +10,7 @@
     "subagentStop": [
       {
         "command": "./hooks/cook-subagent-continue.sh",
+        "matcher": "completion-(bootstrapper|regrounder|implementer|reviewer|auditor|stop-judge)",
         "loop_limit": null
       }
     ],

@@ -31,6 +31,10 @@ chmod +x "$TARGET/scripts/start-letscook-mcp.sh"
 chmod +x "$TARGET/hooks/cook-subagent-continue.sh" 2>/dev/null || true
 chmod +x "$TARGET/hooks/cook-post-mcp-continue.sh" 2>/dev/null || true
 chmod +x "$TARGET/hooks/cook-stop-continue.sh" 2>/dev/null || true
+chmod +x "$TARGET/scripts/rewrite-hook-paths.mjs" 2>/dev/null || true
+
+echo "[install-local-cursor-plugin] rewriting hook paths to absolute..."
+node "$TARGET/scripts/rewrite-hook-paths.mjs" "$TARGET"
 
 echo "[install-local-cursor-plugin] installing npm dependencies..."
 npm install --prefix "$TARGET" --no-fund --no-audit

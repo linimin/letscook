@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Shared parser for letscook MCP tool results inside Cursor hooks.
- * Reads JSON from stdin: { tool_name, tool_output, ... }
+ * Reads JSON from stdin: { tool_name, tool_output, ... } or subagentStop payload.
  * Prints JSON to stdout: { action, additional_context?, followup_message?, sticky? }
  */
 import * as fs from "node:fs";
@@ -80,6 +80,39 @@ function buildFollowup(next) {
 	].join(" ");
 }
 
+function buildSubagentFollowup(next, loopCount) {
+	const base = buildFollowup(next);
+	return `${base} If the subagent output is not yet submitted, call submit_role_result first, then get_workflow_dispatch. (auto-continue ${loopCount ?? 0})`;
+}
+
+function buildGenericSubagentFollowup(loopCount) {
+	return [
+		"Letscook subagent finished. Mandatory next steps in this same conversation:",
+		"1) if not submitted yet, call submit_role_result({ workspace_root, role, raw_output });",
+		"2) call get_workflow_dispatch({ workspace_root });",
+		"3) if dispatch_allowed, immediately dispatch the returned cursor_agent with system_context + task_prompt — do not ask the user to continue.",
+		`(auto-continue ${loopCount ?? 0})`,
+	].join(" ");
+}
+
+function readStickyNext() {
+	if (!fs.existsSync(STICKY_PATH)) return undefined;
+	try {
+		const sticky = JSON.parse(fs.readFileSync(STICKY_PATH, "utf8"));
+		const workspaceRoot = sticky.workspace_root;
+		const role = sticky.next_mandatory_role;
+		if (!workspaceRoot || !role) return undefined;
+		return {
+			workspaceRoot,
+			role,
+			continuation: sticky.continuation_policy ?? "continue",
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+const mode = process.argv[2] ?? "post";
 const raw = await readStdin();
 let input;
 try {
@@ -89,7 +122,37 @@ try {
 	process.exit(0);
 }
 
-const mode = process.argv[2] ?? "post";
+if (mode === "subagent") {
+	if (input.status !== "completed") {
+		process.stdout.write("{}\n");
+		process.exit(0);
+	}
+	const stickyNext = readStickyNext();
+	const loopCount = input.loop_count ?? 0;
+	if (stickyNext) {
+		process.stdout.write(
+			JSON.stringify({ followup_message: buildSubagentFollowup(stickyNext, loopCount) }) + "\n",
+		);
+		process.exit(0);
+	}
+	process.stdout.write(JSON.stringify({ followup_message: buildGenericSubagentFollowup(loopCount) }) + "\n");
+	process.exit(0);
+}
+
+if (mode === "stop") {
+	if (input.status !== "completed") {
+		process.stdout.write("{}\n");
+		process.exit(0);
+	}
+	const stickyNext = readStickyNext();
+	if (!stickyNext) {
+		process.stdout.write("{}\n");
+		process.exit(0);
+	}
+	process.stdout.write(JSON.stringify({ followup_message: buildFollowup(stickyNext) }) + "\n");
+	process.exit(0);
+}
+
 const toolName = String(input.tool_name ?? "");
 const isLetscookTool =
 	/submit_role_result|get_workflow_dispatch|confirm_cook_handoff/i.test(toolName) ||
@@ -132,35 +195,6 @@ try {
 if (mode === "post") {
 	process.stdout.write(JSON.stringify({ additional_context: buildNudge(next) }) + "\n");
 	process.exit(0);
-}
-
-if (mode === "stop") {
-	try {
-		if (!fs.existsSync(STICKY_PATH)) {
-			process.stdout.write("{}\n");
-			process.exit(0);
-		}
-		const sticky = JSON.parse(fs.readFileSync(STICKY_PATH, "utf8"));
-		const workspaceRoot = sticky.workspace_root;
-		const role = sticky.next_mandatory_role;
-		if (!workspaceRoot || !role) {
-			process.stdout.write("{}\n");
-			process.exit(0);
-		}
-		process.stdout.write(
-			JSON.stringify({
-				followup_message: buildFollowup({
-					workspaceRoot,
-					role,
-					continuation: sticky.continuation_policy ?? "continue",
-				}),
-			}) + "\n",
-		);
-		process.exit(0);
-	} catch {
-		process.stdout.write("{}\n");
-		process.exit(0);
-	}
 }
 
 process.stdout.write("{}\n");
