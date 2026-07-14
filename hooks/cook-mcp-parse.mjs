@@ -95,21 +95,74 @@ function buildGenericSubagentFollowup(loopCount) {
 	].join(" ");
 }
 
-function readStickyNext() {
+function resolveConversationId(input, { preferParent = false } = {}) {
+	if (preferParent && typeof input.parent_conversation_id === "string" && input.parent_conversation_id) {
+		return input.parent_conversation_id;
+	}
+	const id = input.conversation_id ?? input.parent_conversation_id ?? input.session_id;
+	return typeof id === "string" && id.length > 0 ? id : undefined;
+}
+
+function readStickyRaw() {
 	if (!fs.existsSync(STICKY_PATH)) return undefined;
 	try {
-		const sticky = JSON.parse(fs.readFileSync(STICKY_PATH, "utf8"));
-		const workspaceRoot = sticky.workspace_root;
-		const role = sticky.next_mandatory_role;
-		if (!workspaceRoot || !role) return undefined;
-		return {
-			workspaceRoot,
-			role,
-			continuation: sticky.continuation_policy ?? "continue",
-		};
+		return JSON.parse(fs.readFileSync(STICKY_PATH, "utf8"));
 	} catch {
 		return undefined;
 	}
+}
+
+function readStickyForConversation(conversationId) {
+	if (!conversationId) return undefined;
+	const sticky = readStickyRaw();
+	if (!sticky || sticky.conversation_id !== conversationId) return undefined;
+	const workspaceRoot = sticky.workspace_root;
+	const role = sticky.next_mandatory_role;
+	if (!workspaceRoot || !role) return undefined;
+	return {
+		workspaceRoot,
+		role,
+		continuation: sticky.continuation_policy ?? "continue",
+	};
+}
+
+function clearStickyForConversation(conversationId) {
+	const sticky = readStickyRaw();
+	if (!sticky) return;
+	if (!conversationId || sticky.conversation_id === conversationId) {
+		try {
+			fs.unlinkSync(STICKY_PATH);
+		} catch {
+			// ignore
+		}
+	}
+}
+
+function writeSticky(conversationId, next) {
+	if (!conversationId) return;
+	const sticky = {
+		conversation_id: conversationId,
+		workspace_root: next.workspaceRoot,
+		next_mandatory_role: next.role,
+		continuation_policy: next.continuation,
+		updated_at: new Date().toISOString(),
+	};
+	try {
+		fs.mkdirSync(path.dirname(STICKY_PATH), { recursive: true });
+		fs.writeFileSync(STICKY_PATH, `${JSON.stringify(sticky, null, 2)}\n`, "utf8");
+	} catch {
+		// ignore
+	}
+}
+
+function isWorkflowClosed(payload) {
+	if (!payload) return false;
+	const dispatch = payload.dispatch && typeof payload.dispatch === "object" ? payload.dispatch : payload;
+	return (
+		payload.workflow_closed === true ||
+		dispatch.workflow_closed === true ||
+		dispatch.reason === "workflow_closed"
+	);
 }
 
 const mode = process.argv[2] ?? "post";
@@ -127,7 +180,8 @@ if (mode === "subagent") {
 		process.stdout.write("{}\n");
 		process.exit(0);
 	}
-	const stickyNext = readStickyNext();
+	const conversationId = resolveConversationId(input, { preferParent: true });
+	const stickyNext = readStickyForConversation(conversationId);
 	const loopCount = input.loop_count ?? 0;
 	if (stickyNext) {
 		process.stdout.write(
@@ -144,7 +198,8 @@ if (mode === "stop") {
 		process.stdout.write("{}\n");
 		process.exit(0);
 	}
-	const stickyNext = readStickyNext();
+	const conversationId = resolveConversationId(input);
+	const stickyNext = readStickyForConversation(conversationId);
 	if (!stickyNext) {
 		process.stdout.write("{}\n");
 		process.exit(0);
@@ -165,32 +220,17 @@ if (mode === "post" && !isLetscookTool) {
 
 const payload = parsePayload(input.tool_output ?? input.result_json ?? "");
 const next = shouldContinue(payload);
+const conversationId = resolveConversationId(input);
 
 if (!next) {
-	if (mode === "stop" && fs.existsSync(STICKY_PATH)) {
-		try {
-			fs.unlinkSync(STICKY_PATH);
-		} catch {
-			// ignore
-		}
+	if (isWorkflowClosed(payload)) {
+		clearStickyForConversation(conversationId);
 	}
 	process.stdout.write("{}\n");
 	process.exit(0);
 }
 
-const sticky = {
-	workspace_root: next.workspaceRoot,
-	next_mandatory_role: next.role,
-	continuation_policy: next.continuation,
-	updated_at: new Date().toISOString(),
-};
-
-try {
-	fs.mkdirSync(path.dirname(STICKY_PATH), { recursive: true });
-	fs.writeFileSync(STICKY_PATH, `${JSON.stringify(sticky, null, 2)}\n`, "utf8");
-} catch {
-	// ignore
-}
+writeSticky(conversationId, next);
 
 if (mode === "post") {
 	process.stdout.write(JSON.stringify({ additional_context: buildNudge(next) }) + "\n");
