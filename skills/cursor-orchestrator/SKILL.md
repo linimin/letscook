@@ -40,4 +40,6 @@ Use when the user wants a pi-letscook-style long-running workflow **without Pi**
 
 ## Hook pairing
 
-Copy `hooks/hooks.json.example` to `.cursor/hooks.json` for `subagentStop` auto-continue after each agent completes.
+The plugin bundles `hooks/hooks.json` (`subagentStop` → `cook-subagent-continue.sh`). It loads automatically when letscook is enabled in Customize. Verify in **Customize → Hooks** or the Hooks output channel.
+
+`hooks/hooks.json.example` is only for repos that use letscook **without** the plugin and want project-level `.cursor/hooks.json` instead.

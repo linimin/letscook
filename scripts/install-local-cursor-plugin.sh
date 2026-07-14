@@ -64,12 +64,12 @@ Bundled resources:
             cook-handoff-boundary, completion-protocol, cursor-orchestrator, cursor-orchestrator-monitor
   - Commands: cook
   - Rule: letscook-prerequisites
-  - Hooks: subagentStop auto-continue (enable in project .cursor/hooks.json or copy from hooks/)
+  - Hooks: subagentStop auto-continue (bundled; active when plugin is enabled)
 
 Next steps:
 1. Reload Cursor (Developer: Reload Window)
 2. Open Customize → enable the letscook plugin and letscook MCP server
-3. Copy hooks/hooks.json.example to your project's .cursor/hooks.json if you want subagentStop chaining
+3. Confirm **Customize → Hooks** lists letscook subagentStop (optional sanity check)
 
 Alternative: import the repo root from Customize (uses .cursor-plugin/marketplace.json)
 

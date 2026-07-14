@@ -6,5 +6,11 @@
   "author": { "name": "linimin" },
   "license": "MIT",
   "keywords": ["cook", "workflow", "mcp", "orchestrator", "completion"],
-  "repository": "https://github.com/linimin/letscook"
+  "repository": "https://github.com/linimin/letscook",
+  "hooks": "hooks/hooks.json",
+  "mcpServers": "mcp.json",
+  "skills": "skills/",
+  "agents": "agents/",
+  "commands": "commands/",
+  "rules": "rules/"
 }

@@ -2,7 +2,7 @@
 
 Cursor plugin + MCP orchestrator for the [pi-letscook](https://github.com/linimin/pi-letscook) completion protocol — **no Pi required**.
 
-Install the plugin once; it bundles MCP server, skills, commands, rules, and optional hooks.
+Install the plugin once; it bundles MCP server, skills, commands, rules, and hooks.
 
 ## Install as Cursor plugin
 
@@ -33,12 +33,8 @@ On first MCP start, dependencies install automatically.
    mkdir -p .cursor
    cp ~/dev/letscook/examples/worktrees.json.example .cursor/worktrees.json
    ```
-5. (Optional) Copy hook for auto-continue:
-   ```bash
-   mkdir -p .cursor/hooks
-   cp ~/dev/letscook/hooks/cook-subagent-continue.sh .cursor/hooks/
-   cp ~/dev/letscook/hooks/hooks.json.example .cursor/hooks.json
-   ```
+
+Hooks (`subagentStop` auto-continue for the orchestrator loop) load automatically from the plugin's `hooks/hooks.json` when letscook is enabled in Customize — no manual copy into your project.
 
 ## Workflow
 

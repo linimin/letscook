@@ -9,9 +9,9 @@ When using the **letscook** MCP, bundled skills, or `/cook`:
 
 - **Node.js >= 20** is required. The plugin MCP launcher runs `npm install` on first start if needed.
 - Enable the **letscook** MCP server in Customize after installing the plugin.
-- **v0.2**: run **`/worktree`** before **`/cook`** so work happens in a Cursor-managed checkout (`.cursor/worktrees/`), not main.
+- **v0.3**: run **`/worktree`** before **`/cook`** so work happens in a Cursor-managed checkout (`.cursor/worktrees/`), not main.
 - Add **`.cursor/worktrees.json`** (see `examples/worktrees.json.example`) for dependency setup in new worktrees.
-- Optional: copy `hooks/hooks.json.example` to your project's `.cursor/hooks.json` for `subagentStop` auto-continue.
+- **`subagentStop` hook** (orchestrator auto-continue) is bundled in the plugin (`hooks/hooks.json`) and activates when letscook is enabled in Customize.
 
 ## Primary agent loop
 
