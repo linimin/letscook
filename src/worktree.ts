@@ -1,22 +1,48 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { promises as fsp } from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
-export type EnsureCookWorktreeArgs = {
-	repoRoot: string;
-	branch: string;
-	slug: string;
-	baseRef?: string;
+export type CookWorkspaceMode = "auto" | "cursor_native";
+
+export type GitWorktreeEntry = {
+	path: string;
+	branch?: string;
+	head?: string;
+	isMain: boolean;
 };
 
-export type EnsureCookWorktreeResult = {
+export type CookWorkspaceContext = {
 	workspace_root: string;
+	main_repo_root: string;
 	branch: string;
-	path: string;
-	created: boolean;
-	repo_root: string;
+	is_linked_worktree: boolean;
+	is_main_checkout: boolean;
+	worktree_kind: "main" | "cursor" | "other_linked";
+	worktree_path?: string;
+	ready_for_cook: boolean;
+	recommended_mode: CookWorkspaceMode;
+	messages: string[];
+	next_steps: string[];
 };
+
+export type ResolveCookWorkspaceResult =
+	| {
+			ok: true;
+			mode: CookWorkspaceMode;
+			workspace_root: string;
+			main_repo_root: string;
+			branch: string;
+			worktree_kind: CookWorkspaceContext["worktree_kind"];
+			messages: string[];
+	  }
+	| {
+			ok: false;
+			mode: CookWorkspaceMode;
+			error: string;
+			context?: CookWorkspaceContext;
+			next_steps: string[];
+	  };
 
 function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string } {
 	const result = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -27,15 +53,7 @@ function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; std
 	};
 }
 
-function sanitizeSlug(slug: string): string {
-	return slug.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "task";
-}
-
-function worktreePath(repoRoot: string, slug: string): string {
-	return path.join(repoRoot, ".worktrees", `cook-${sanitizeSlug(slug)}`);
-}
-
-function normalizePath(candidate: string): string {
+export function normalizePath(candidate: string): string {
 	try {
 		return realpathSync.native(candidate);
 	} catch {
@@ -43,17 +61,35 @@ function normalizePath(candidate: string): string {
 	}
 }
 
-function isGitWorktreePath(repoRoot: string, candidate: string): boolean {
+export function classifyWorktreePath(worktreePathname: string): CookWorkspaceContext["worktree_kind"] {
+	const normalized = normalizePath(worktreePathname);
+	const parts = normalized.split(path.sep);
+	if (parts.includes(".cursor") && parts.includes("worktrees")) return "cursor";
+	return "other_linked";
+}
+
+export function parseGitWorktreeList(porcelain: string): GitWorktreeEntry[] {
+	const blocks = porcelain.split(/\n(?=worktree )/).filter(Boolean);
+	return blocks.map((block, index) => {
+		const lines = block.split("\n");
+		const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+		const branchLine = lines.find((line) => line.startsWith("branch "));
+		const headLine = lines.find((line) => line.startsWith("HEAD "));
+		const pathValue = worktreeLine?.slice("worktree ".length).trim() ?? "";
+		const branch = branchLine?.slice("branch refs/heads/".length).trim();
+		return {
+			path: pathValue,
+			branch,
+			head: headLine?.slice("HEAD ".length).trim(),
+			isMain: index === 0,
+		};
+	});
+}
+
+export function listGitWorktrees(repoRoot: string): GitWorktreeEntry[] {
 	const listed = runGit(repoRoot, ["worktree", "list", "--porcelain"]);
-	if (!listed.ok) return false;
-	const resolved = normalizePath(candidate);
-	for (const line of listed.stdout.split("\n")) {
-		if (line.startsWith("worktree ")) {
-			const listedPath = line.slice("worktree ".length).trim();
-			if (normalizePath(listedPath) === resolved) return true;
-		}
-	}
-	return false;
+	if (!listed.ok) return [];
+	return parseGitWorktreeList(listed.stdout);
 }
 
 export function findGitRepoRoot(startCwd: string): string | undefined {
@@ -69,45 +105,176 @@ export function findGitRepoRoot(startCwd: string): string | undefined {
 	}
 }
 
-export async function ensureCookWorktree(args: EnsureCookWorktreeArgs): Promise<EnsureCookWorktreeResult> {
-	const repoRoot = path.resolve(args.repoRoot);
-	const branch = args.branch.trim();
-	const slug = sanitizeSlug(args.slug);
-	const targetPath = worktreePath(repoRoot, slug);
-	const baseRef = args.baseRef?.trim() || "HEAD";
-
-	if (!runGit(repoRoot, ["rev-parse", "--is-inside-work-tree"]).ok) {
-		throw new Error(`not a git repository: ${repoRoot}`);
+export function findMainGitRepoRoot(startCwd: string): string | undefined {
+	const workspaceRoot = findGitRepoRoot(startCwd);
+	if (!workspaceRoot) return undefined;
+	const gitCommonDir = runGit(workspaceRoot, ["rev-parse", "--git-common-dir"]);
+	if (!gitCommonDir.ok) return workspaceRoot;
+	const commonPath = path.resolve(workspaceRoot, gitCommonDir.stdout);
+	const worktreesMarker = `${path.sep}.git${path.sep}worktrees${path.sep}`;
+	if (commonPath.includes(worktreesMarker)) {
+		const gitDir = path.dirname(path.dirname(commonPath));
+		return path.dirname(gitDir);
 	}
+	return path.dirname(commonPath);
+}
 
-	if (isGitWorktreePath(repoRoot, targetPath)) {
-		const currentBranch = runGit(targetPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
-		if (currentBranch.ok && currentBranch.stdout !== branch) {
-			throw new Error(`worktree branch mismatch: expected ${branch}, found ${currentBranch.stdout}`);
-		}
+export function getCookWorkspaceContext(args?: {
+	workspaceRoot?: string;
+	cwd?: string;
+}): CookWorkspaceContext {
+	const startCwd = args?.workspaceRoot ?? args?.cwd ?? process.cwd();
+	const workspaceRoot = findGitRepoRoot(startCwd);
+	const messages: string[] = [];
+	const next_steps: string[] = [];
+
+	if (!workspaceRoot) {
 		return {
-			workspace_root: targetPath,
-			branch,
-			path: targetPath,
-			created: false,
-			repo_root: repoRoot,
+			workspace_root: path.resolve(startCwd),
+			main_repo_root: path.resolve(startCwd),
+			branch: "",
+			is_linked_worktree: false,
+			is_main_checkout: true,
+			worktree_kind: "main",
+			ready_for_cook: false,
+			recommended_mode: "cursor_native",
+			messages: ["not inside a git repository"],
+			next_steps: ["Open a git repository before running /cook"],
 		};
 	}
 
-	await fsp.mkdir(path.dirname(targetPath), { recursive: true });
-	const branchExists = runGit(repoRoot, ["show-ref", "--verify", `refs/heads/${branch}`]);
-	if (!branchExists.ok) {
-		const created = runGit(repoRoot, ["branch", branch, baseRef]);
-		if (!created.ok) throw new Error(`failed to create branch ${branch}: ${created.stderr}`);
+	const mainRepoRoot = findMainGitRepoRoot(workspaceRoot) ?? workspaceRoot;
+	const branchResult = runGit(workspaceRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
+	const branch = branchResult.ok ? branchResult.stdout : "";
+	const gitDir = runGit(workspaceRoot, ["rev-parse", "--git-dir"]);
+	const gitDirPath = gitDir.ok ? path.resolve(workspaceRoot, gitDir.stdout) : "";
+	const isLinkedWorktree = gitDirPath.includes(`${path.sep}.git${path.sep}worktrees${path.sep}`);
+	const isMainCheckout = !isLinkedWorktree;
+	const worktreeKind: CookWorkspaceContext["worktree_kind"] = isMainCheckout
+		? "main"
+		: classifyWorktreePath(workspaceRoot);
+
+	let readyForCook = false;
+	const recommendedMode: CookWorkspaceMode = "cursor_native";
+
+	if (isMainCheckout) {
+		messages.push("current checkout is the main worktree");
+		next_steps.push("Run Cursor `/worktree <task summary>` in this chat before `/cook`");
+	} else if (worktreeKind === "cursor") {
+		readyForCook = true;
+		messages.push("running in a Cursor-managed worktree (.cursor/worktrees/)");
+		next_steps.push("Use workspace_root from this context for prepare_cook_handoff and orchestrator tools");
+		next_steps.push("When done: `/apply-worktree` then `/delete-worktree`");
+	} else {
+		readyForCook = true;
+		messages.push("running in a linked git worktree (not Cursor-managed)");
+		next_steps.push("Use this workspace_root for the letscook workflow");
+		next_steps.push("Prefer Cursor `/worktree` for automatic setup and cleanup");
 	}
-	const added = runGit(repoRoot, ["worktree", "add", "-B", branch, targetPath, baseRef]);
-	if (!added.ok) throw new Error(`failed to add worktree: ${added.stderr}`);
 
 	return {
-		workspace_root: targetPath,
+		workspace_root: workspaceRoot,
+		main_repo_root: mainRepoRoot,
 		branch,
-		path: targetPath,
-		created: true,
-		repo_root: repoRoot,
+		is_linked_worktree: isLinkedWorktree,
+		is_main_checkout: isMainCheckout,
+		worktree_kind: worktreeKind,
+		worktree_path: isLinkedWorktree ? workspaceRoot : undefined,
+		ready_for_cook: readyForCook,
+		recommended_mode: recommendedMode,
+		messages,
+		next_steps,
 	};
+}
+
+export async function resolveCookWorkspace(args: {
+	mode?: CookWorkspaceMode;
+	workspaceRoot?: string;
+	repoRoot?: string;
+}): Promise<ResolveCookWorkspaceResult> {
+	const mode = args.mode ?? "auto";
+	const context = getCookWorkspaceContext({
+		workspaceRoot: args.workspaceRoot,
+		cwd: args.repoRoot,
+	});
+
+	const useLinked =
+		mode === "cursor_native" ? context.is_linked_worktree : context.is_linked_worktree;
+
+	if (useLinked) {
+		return {
+			ok: true,
+			mode,
+			workspace_root: context.workspace_root,
+			main_repo_root: context.main_repo_root,
+			branch: context.branch,
+			worktree_kind: context.worktree_kind,
+			messages: context.messages,
+		};
+	}
+
+	return {
+		ok: false,
+		mode,
+		error: "cook requires an isolated worktree; main checkout is not allowed",
+		context,
+		next_steps: [
+			"Run Cursor `/worktree <short task summary>` in this chat (creates .cursor/worktrees/...)",
+			"Then run `/cook` again in the same worktree chat",
+		],
+	};
+}
+
+export function buildFinishCookWorkflowGuide(args: {
+	workspaceRoot: string;
+	workflowClosed?: boolean;
+}): {
+	ok: boolean;
+	workspace_root: string;
+	worktree_kind: CookWorkspaceContext["worktree_kind"];
+	next_steps: string[];
+	warnings: string[];
+} {
+	const context = getCookWorkspaceContext({ workspaceRoot: args.workspaceRoot });
+	const warnings: string[] = [];
+	const next_steps: string[] = [];
+
+	if (!args.workflowClosed) {
+		warnings.push("workflow may still be active; confirm get_workflow_status before finishing");
+	}
+
+	if (context.worktree_kind === "cursor") {
+		next_steps.push("Review changes in this worktree chat");
+		next_steps.push("If good: `/apply-worktree` to merge into main checkout");
+		next_steps.push("Then: `/delete-worktree` to let Cursor clean up the sandbox");
+		next_steps.push("Or ask the agent to commit, push, and open a PR from this worktree");
+		warnings.push("avoid manual git worktree remove on .cursor/worktrees paths; prefer /delete-worktree");
+	} else if (context.is_linked_worktree) {
+		next_steps.push(`git worktree remove ${context.workspace_root}`);
+		next_steps.push("git worktree prune");
+		warnings.push("prefer Cursor `/worktree` for future cooks so `/delete-worktree` handles cleanup");
+	} else {
+		next_steps.push("No linked worktree detected; nothing to remove");
+	}
+
+	return {
+		ok: true,
+		workspace_root: context.workspace_root,
+		worktree_kind: context.worktree_kind,
+		next_steps,
+		warnings,
+	};
+}
+
+export function defaultCursorWorktreesJsonExample(): Record<string, unknown> {
+	return {
+		"setup-worktree": [
+			"npm ci --no-fund --no-audit 2>/dev/null || npm install --no-fund --no-audit 2>/dev/null || true",
+			"test -f \"$ROOT_WORKTREE_PATH/.env\" && cp \"$ROOT_WORKTREE_PATH/.env\" .env || true",
+		],
+	};
+}
+
+export function cursorWorktreesHomeHint(): string {
+	return path.join(os.homedir(), ".cursor", "worktrees");
 }

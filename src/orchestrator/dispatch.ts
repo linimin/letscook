@@ -94,8 +94,9 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 			reason: "no_active_workflow",
 			system_context: "",
 			task_prompt: "",
+			cursor_agent: "",
 			subagent_type: "generalPurpose",
-			next_steps: ["Call start_cook_workflow after handoff confirmation to scaffold .agent/ state"],
+			next_steps: ["Call confirm_cook_handoff after handoff confirmation to scaffold .agent/ state"],
 		};
 	}
 
@@ -109,6 +110,7 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 			reason: "workflow_parked",
 			system_context: "",
 			task_prompt: "",
+			cursor_agent: "",
 			subagent_type: "generalPurpose",
 			continuation_policy: continuation,
 			workflow_entry_status: entryStatus,
@@ -123,6 +125,7 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 			reason: "workflow_closed",
 			system_context: "",
 			task_prompt: "",
+			cursor_agent: "",
 			subagent_type: "generalPurpose",
 			workflow_entry_status: entryStatus,
 			continuation_policy: continuation,
@@ -139,6 +142,7 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 			reason: "missing_next_mandatory_role",
 			system_context: "",
 			task_prompt: "",
+			cursor_agent: "",
 			subagent_type: "generalPurpose",
 			next_steps: ["Inspect .agent/current/state.json and repair next_mandatory_role"],
 		};
@@ -151,12 +155,14 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 		reason: "dispatch_ready",
 		system_context: buildRoleSystemContext(snapshot, role),
 		task_prompt: buildRoleTaskPrompt(snapshot, role),
+		cursor_agent: role,
 		subagent_type: subagentTypeForRole(role),
 		continuation_policy: continuation,
 		workflow_entry_status: entryStatus,
 		next_steps: [
-			`Dispatch a Cursor subagent (Task tool) for ${role}`,
-			`After completion, call submit_role_result with role and output`,
+			`Invoke bundled agent "${role}" from the letscook plugin (Task/subagent delegation)`,
+			`Pass system_context + task_prompt in the invocation`,
+			`After the agent completes, call submit_role_result({ workspace_root, role: "${role}", raw_output })`,
 		],
 	};
 }

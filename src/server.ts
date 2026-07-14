@@ -3,20 +3,41 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { handleLetscookTool } from "./tools/handler.ts";
+import type { LetscookToolContext } from "./tools/context.ts";
 
 const TOOLS = [
 	{
-		name: "ensure_cook_worktree",
-		description: "Create or resolve a dedicated cook git worktree under .worktrees/cook-<slug>/",
+		name: "get_cook_workspace_context",
+		description: "Detect whether the current checkout is main or a Cursor-linked worktree",
 		inputSchema: {
 			type: "object",
 			properties: {
+				workspace_root: { type: "string" },
 				repo_root: { type: "string" },
-				branch: { type: "string" },
-				slug: { type: "string" },
-				base_ref: { type: "string" },
 			},
-			required: ["slug"],
+		},
+	},
+	{
+		name: "resolve_cook_workspace",
+		description: "Resolve workspace_root for /cook — requires a linked worktree (use Cursor /worktree first)",
+		inputSchema: {
+			type: "object",
+			properties: {
+				mode: { type: "string", enum: ["auto", "cursor_native"] },
+				workspace_root: { type: "string" },
+				repo_root: { type: "string" },
+			},
+		},
+	},
+	{
+		name: "finish_cook_workflow",
+		description: "Return apply/delete worktree guidance after workflow completes (Cursor /apply-worktree, /delete-worktree)",
+		inputSchema: {
+			type: "object",
+			properties: {
+				workspace_root: { type: "string" },
+			},
+			required: ["workspace_root"],
 		},
 	},
 	{
@@ -38,6 +59,22 @@ const TOOLS = [
 		inputSchema: {
 			type: "object",
 			properties: { workspace_root: { type: "string" } },
+			required: ["workspace_root"],
+		},
+	},
+	{
+		name: "confirm_cook_handoff",
+		description:
+			"Show native handoff confirmation UI (MCP elicitation form when supported, otherwise AskQuestion fallback payload)",
+		inputSchema: {
+			type: "object",
+			properties: {
+				workspace_root: { type: "string" },
+				skip_elicitation: {
+					type: "boolean",
+					description: "Force AskQuestion fallback even when MCP elicitation is available",
+				},
+			},
 			required: ["workspace_root"],
 		},
 	},
@@ -70,8 +107,49 @@ const TOOLS = [
 		inputSchema: { type: "object", properties: {} },
 	},
 	{
+		name: "list_cursor_plans",
+		description: "List Cursor Plan mode files under .cursor/plans; optional plan_hint ranks by chat context",
+		inputSchema: {
+			type: "object",
+			properties: {
+				repo_root: { type: "string" },
+				include_global: { type: "boolean", description: "Also scan ~/.cursor/plans" },
+				plan_hint: {
+					type: "string",
+					description: "Short summary from recent chat to rank matching plans",
+				},
+			},
+		},
+	},
+	{
+		name: "preview_plan_to_cook_handoff",
+		description: "Convert a saved Cursor .plan.md file into a cook_handoff capsule draft",
+		inputSchema: {
+			type: "object",
+			properties: {
+				plan_path: {
+					type: "string",
+					description: "Explicit path to .plan.md when known",
+				},
+				open_plan_path: {
+					type: "string",
+					description: "Path of a .plan.md file currently open in the editor",
+				},
+				plan_hint: {
+					type: "string",
+					description: "Summary from recent chat used to pick the matching plan",
+				},
+				repo_root: { type: "string" },
+				overrides: {
+					type: "object",
+					description: "Optional partial cook_handoff fields to merge over mapped values",
+				},
+			},
+		},
+	},
+	{
 		name: "get_workflow_dispatch",
-		description: "Read .agent/ and return the next mandatory completion role + prompts for a Cursor subagent",
+		description: "Read .agent/ and return the next mandatory completion role, cursor_agent name, and prompts",
 		inputSchema: {
 			type: "object",
 			properties: { workspace_root: { type: "string" } },
@@ -150,11 +228,15 @@ const TOOLS = [
 ] as const;
 
 async function main() {
-	const server = new Server({ name: "letscook", version: "0.1.0" }, { capabilities: { tools: {} } });
+	const server = new Server({ name: "letscook", version: "0.2.0" }, { capabilities: { tools: {} } });
+	const toolContext: LetscookToolContext = {
+		elicitInput: (params) => server.elicitInput(params),
+		getClientCapabilities: () => server.getClientCapabilities(),
+	};
 	server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...TOOLS] }));
 	server.setRequestHandler(CallToolRequestSchema, async (request) => {
 		const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-		return await handleLetscookTool(request.params.name, args);
+		return await handleLetscookTool(request.params.name, args, toolContext);
 	});
 	const transport = new StdioServerTransport();
 	await server.connect(transport);

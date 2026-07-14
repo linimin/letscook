@@ -3,16 +3,16 @@ import * as path from "node:path";
 import {
 	assessCookHandoffStartability,
 	buildConfirmationPreview,
-	cancelPendingHandoff,
 	COOK_HANDOFF_SCHEMA_EXAMPLE,
-	markHandoffConfirmed,
-	markHandoffKickoffStarted,
 	normalizeCookHandoffCapsule,
 	readCookHandoffSidecar,
 	resolveWorkspaceRoot,
 	validateCookHandoffSchema,
 	writeCookHandoffFile,
 } from "../handoff/capsule.ts";
+import { confirmCookHandoff, formatConfirmationBrief } from "../handoff/confirmation.ts";
+import { cancelCookHandoff, startCookWorkflowFromHandoff } from "../handoff/start-workflow.ts";
+import type { LetscookToolContext } from "./context.ts";
 import {
 	cancelWorkflow,
 	getWorkflowDispatch,
@@ -22,9 +22,17 @@ import {
 	resumeWorkflow,
 	submitRoleResult,
 } from "../orchestrator/dispatch.ts";
-import { scaffoldWorkflowFromHandoff } from "../control-plane/state.ts";
 import { asString, loadWorkflowSnapshot } from "../control-plane/state.ts";
-import { ensureCookWorktree, findGitRepoRoot } from "../worktree.ts";
+import { listCursorPlans, previewPlanToCookHandoff } from "../handoff/plan-to-capsule.ts";
+import {
+	buildFinishCookWorkflowGuide,
+	cursorWorktreesHomeHint,
+	defaultCursorWorktreesJsonExample,
+	findGitRepoRoot,
+	findMainGitRepoRoot,
+	getCookWorkspaceContext,
+	resolveCookWorkspace,
+} from "../worktree.ts";
 
 function textResult(payload: unknown) {
 	return {
@@ -43,24 +51,46 @@ function requireWorkspaceRoot(args: Record<string, unknown>): string {
 	});
 }
 
-export async function handleLetscookTool(name: string, args: Record<string, unknown>) {
+export async function handleLetscookTool(
+	name: string,
+	args: Record<string, unknown>,
+	ctx: LetscookToolContext = {},
+) {
 	try {
 		switch (name) {
-			case "ensure_cook_worktree": {
-				const repoRoot = path.resolve(
-					typeof args.repo_root === "string"
-						? args.repo_root
-						: (findGitRepoRoot(process.cwd()) ?? process.cwd()),
-				);
-				const slug = typeof args.slug === "string" ? args.slug : "task";
-				const branch = typeof args.branch === "string" ? args.branch : `cook/${slug}`;
-				const result = await ensureCookWorktree({
-					repoRoot,
-					branch,
-					slug,
-					baseRef: typeof args.base_ref === "string" ? args.base_ref : "HEAD",
+			case "get_cook_workspace_context": {
+				const context = getCookWorkspaceContext({
+					workspaceRoot: typeof args.workspace_root === "string" ? args.workspace_root : undefined,
+					cwd: typeof args.repo_root === "string" ? args.repo_root : process.cwd(),
 				});
-				return textResult({ ok: true, ...result });
+				return textResult({
+					ok: true,
+					...context,
+					cursor_worktrees_home: cursorWorktreesHomeHint(),
+					worktrees_json_example: defaultCursorWorktreesJsonExample(),
+				});
+			}
+			case "resolve_cook_workspace": {
+				const mode = args.mode === "cursor_native" || args.mode === "auto" ? args.mode : "auto";
+				return textResult(
+					await resolveCookWorkspace({
+						mode,
+						workspaceRoot: typeof args.workspace_root === "string" ? args.workspace_root : undefined,
+						repoRoot: typeof args.repo_root === "string" ? args.repo_root : undefined,
+					}),
+				);
+			}
+			case "finish_cook_workflow": {
+				const workspaceRoot = requireWorkspaceRoot(args);
+				const status = await getWorkflowStatus(workspaceRoot);
+				const guide = buildFinishCookWorkflowGuide({
+					workspaceRoot,
+					workflowClosed: status.workflow_closed === true,
+				});
+				return textResult({
+					workflow_status: status,
+					...guide,
+				});
 			}
 			case "prepare_cook_handoff": {
 				const workspaceRoot = requireWorkspaceRoot(args);
@@ -79,11 +109,19 @@ export async function handleLetscookTool(name: string, args: Record<string, unkn
 					confirmation_id: written.confirmationId,
 					handoff_sha256: written.handoffSha256,
 					confirmation_preview: buildConfirmationPreview(capsule),
+					confirmation_brief: formatConfirmationBrief(buildConfirmationPreview(capsule)),
 					next_steps: [
-						"Show confirmation_preview to the user",
-						"On Start, call start_cook_workflow with workspace_root and confirmation_id",
+						"Call confirm_cook_handoff({ workspace_root }) for MCP elicitation or AskQuestion fallback",
 					],
 				});
+			}
+			case "confirm_cook_handoff": {
+				const workspaceRoot = requireWorkspaceRoot(args);
+				const result = await confirmCookHandoff(workspaceRoot, ctx, {
+					skip_elicitation: args.skip_elicitation === true,
+				});
+				if (result.ok === false) return toolError(asString(result.error) ?? "confirm failed", asString(result.code));
+				return textResult(result);
 			}
 			case "preview_cook_handoff_confirmation": {
 				const workspaceRoot = requireWorkspaceRoot(args);
@@ -94,19 +132,21 @@ export async function handleLetscookTool(name: string, args: Record<string, unkn
 					"utf8",
 				);
 				const capsule = normalizeCookHandoffCapsule(JSON.parse(handoffRaw) as Record<string, unknown>);
+				const layout = buildConfirmationPreview(capsule);
 				return textResult({
 					ok: true,
 					workspace_root: workspaceRoot,
 					confirmation_id: sidecar.confirmation_id,
-					layout: buildConfirmationPreview(capsule),
+					layout,
+					confirmation_brief: formatConfirmationBrief(layout),
+					next_steps: ["Call confirm_cook_handoff({ workspace_root }) to show native confirmation UI"],
 				});
 			}
 			case "start_cook_workflow": {
 				const workspaceRoot = requireWorkspaceRoot(args);
 				const action = asString(args.action) ?? "start";
 				if (action === "cancel") {
-					await cancelPendingHandoff(workspaceRoot);
-					return textResult({ ok: true, cancelled: true });
+					return textResult({ ok: true, ...(await cancelCookHandoff(workspaceRoot)) });
 				}
 				const confirmationId = asString(args.confirmation_id);
 				if (!confirmationId) return toolError("confirmation_id is required to start", "missing_confirmation_id");
@@ -124,29 +164,9 @@ export async function handleLetscookTool(name: string, args: Record<string, unkn
 						would_scaffold: true,
 					});
 				}
-				await markHandoffConfirmed(workspaceRoot, confirmationId);
-				const handoffRaw = await fsp.readFile(
-					path.join(workspaceRoot, ".agent/tmp/cursor-handoff.json"),
-					"utf8",
-				);
-				const capsule = normalizeCookHandoffCapsule(JSON.parse(handoffRaw) as Record<string, unknown>);
-				const projectName = path.basename(workspaceRoot);
-				const snapshot = await scaffoldWorkflowFromHandoff(workspaceRoot, capsule, projectName);
-				await markHandoffKickoffStarted(workspaceRoot, confirmationId);
-				const dispatch = await getWorkflowDispatch(workspaceRoot);
 				return textResult({
 					ok: true,
-					workspace_root: workspaceRoot,
-					workflow_session_id: asString(snapshot.state.workflow_session_id),
-					orchestrator: "letscook-mcp",
-					monitoring: { enabled: true, mode: "cursor_subagent_loop" },
-					dispatch,
-					next_steps: [
-						"Call get_workflow_dispatch to fetch the first mandatory role",
-						"Dispatch a Cursor subagent (Task) with returned system_context + task_prompt",
-						"Call submit_role_result when the subagent completes",
-						"Repeat until dispatch.dispatch_allowed is false",
-					],
+					...(await startCookWorkflowFromHandoff(workspaceRoot, confirmationId)),
 				});
 			}
 			case "get_cook_handoff_status": {
@@ -162,6 +182,34 @@ export async function handleLetscookTool(name: string, args: Record<string, unkn
 			}
 			case "get_cook_handoff_schema":
 				return textResult({ ok: true, example: COOK_HANDOFF_SCHEMA_EXAMPLE });
+			case "list_cursor_plans": {
+				const repoRoot =
+					typeof args.repo_root === "string"
+						? path.resolve(args.repo_root)
+						: (findMainGitRepoRoot(process.cwd()) ?? findGitRepoRoot(process.cwd()) ?? process.cwd());
+				const plans = await listCursorPlans({
+					repoRoot,
+					includeGlobal: args.include_global === true,
+					planHint: typeof args.plan_hint === "string" ? args.plan_hint : undefined,
+				});
+				return textResult({ ok: true, repo_root: repoRoot, plans });
+			}
+			case "preview_plan_to_cook_handoff":
+				return textResult(
+					await previewPlanToCookHandoff({
+						planPath: typeof args.plan_path === "string" ? args.plan_path : undefined,
+						openPlanPath: typeof args.open_plan_path === "string" ? args.open_plan_path : undefined,
+						planHint: typeof args.plan_hint === "string" ? args.plan_hint : undefined,
+						repoRoot:
+							typeof args.repo_root === "string"
+								? path.resolve(args.repo_root)
+								: (findMainGitRepoRoot(process.cwd()) ?? findGitRepoRoot(process.cwd()) ?? process.cwd()),
+						overrides:
+							typeof args.overrides === "object" && args.overrides !== null
+								? (args.overrides as Record<string, unknown>)
+								: undefined,
+					}),
+				);
 			case "get_workflow_dispatch":
 				return textResult({ ok: true, ...(await getWorkflowDispatch(requireWorkspaceRoot(args))) });
 			case "submit_role_result":

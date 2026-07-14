@@ -74,6 +74,7 @@ export type WorkflowDispatch = {
 	reason: string;
 	system_context: string;
 	task_prompt: string;
+	cursor_agent: string;
 	subagent_type: "generalPurpose" | "explore" | "shell";
 	continuation_policy?: string;
 	workflow_entry_status?: string;
