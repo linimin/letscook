@@ -1,30 +1,42 @@
 ---
 name: cursor-orchestrator
-description: Run a Cursor-native completion workflow via letscook MCP with subagents and canonical .agent/ state.
+description: Run a Cursor-native completion workflow via letscook MCP with bundled completion agents and canonical .agent/ state.
 ---
 
 # Cursor-native completion workflow (letscook MCP)
 
 Use when the user wants a pi-letscook-style long-running workflow **without Pi**.
 
+## Bundled agents (plugin installs all six)
+
+| Agent | Role |
+|-------|------|
+| `completion-bootstrapper` | Scaffold `.agent/` helpers |
+| `completion-regrounder` | Reconcile plan / slice / state |
+| `completion-implementer` | Implement one slice + commit |
+| `completion-reviewer` | Read-only slice review |
+| `completion-auditor` | Read-only project audit |
+| `completion-stop-judge` | Read-only stop verdict |
+
 ## Loop (primary agent)
 
-1. `ensure_cook_worktree` → `prepare_cook_handoff` → confirm → `start_cook_workflow`
+1. `resolve_cook_workspace({ mode: "auto" })` → `prepare_cook_handoff` → `confirm_cook_handoff` → orchestrator loop
 2. `get_workflow_dispatch({ workspace_root })`
-3. If `dispatch_allowed`, launch a **Task subagent** with:
-   - `system_context` + `task_prompt` from dispatch
-   - subagent type from `subagent_type`
-4. `submit_role_result({ workspace_root, role, raw_output })`
+3. If `dispatch_allowed`, **invoke the bundled agent** named `cursor_agent`:
+   - Use Task / subagent delegation targeting that agent name
+   - Include `system_context` + `task_prompt` from dispatch
+4. `submit_role_result({ workspace_root, role, raw_output })` with the agent's full final report
 5. Repeat from step 2 until `workflow_closed` or user parks/cancels
-6. Monitor with `poll_workflow_updates` when asked
+6. `finish_cook_workflow` → guide `/apply-worktree` and `/delete-worktree`
+7. Use `cursor-orchestrator-monitor` when the user asks for status
 
 ## Rules
 
-- Always thread the same `workspace_root` (cook worktree path).
+- Always thread the same `workspace_root` (Cursor worktree checkout).
 - Never guess `next_mandatory_role`; always use MCP dispatch/submit responses.
-- After `park_workflow`, stop dispatching until `resume_workflow`.
-- Evaluator roles (reviewer, auditor, stop-judge) must stay read-only.
+- Dispatch the **named bundled agent** (`cursor_agent`), not a generic assistant.
+- Evaluator agents (reviewer, auditor, stop-judge) must stay read-only.
 
-## Optional hook pairing
+## Hook pairing
 
-Configure `subagentStop` to return `followup_message` prompting the primary agent to call `get_workflow_dispatch` again. Set `loop_limit` high enough for multi-slice workflows.
+Copy `hooks/hooks.json.example` to `.cursor/hooks.json` for `subagentStop` auto-continue after each agent completes.

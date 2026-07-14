@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "letscook": {
+      "command": "bash",
+      "args": ["scripts/start-letscook-mcp.sh"],
+      "env": {}
+    }
+  }
+}

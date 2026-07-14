@@ -1,0 +1,10 @@
+{
+  "name": "letscook",
+  "displayName": "Letscook",
+  "description": "Cursor-native completion workflow orchestrator with six bundled completion agents (pi-letscook protocol, no Pi required)",
+  "version": "0.2.0",
+  "author": { "name": "linimin" },
+  "license": "MIT",
+  "keywords": ["cook", "workflow", "mcp", "orchestrator", "completion"],
+  "repository": "https://github.com/linimin/letscook"
+}

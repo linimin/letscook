@@ -1,0 +1,17 @@
+{
+  "name": "letscook",
+  "owner": {
+    "name": "linimin"
+  },
+  "metadata": {
+    "description": "Cursor-native completion workflow orchestrator",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "letscook",
+      "source": ".",
+      "description": "MCP orchestrator, skills, hooks, and commands for pi-letscook-style workflows without Pi"
+    }
+  ]
+}

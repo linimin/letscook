@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "subagentStop": [
+      {
+        "command": "./hooks/cook-subagent-continue.sh",
+        "matcher": "generalPurpose|explore",
+        "loop_limit": 50
+      }
+    ]
+  }
+}

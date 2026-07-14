@@ -1,0 +1,29 @@
+---
+description: Prerequisites for letscook Cursor-native completion workflows
+alwaysApply: false
+---
+
+# Letscook prerequisites
+
+When using the **letscook** MCP, bundled skills, or `/cook`:
+
+- **Node.js >= 20** is required. The plugin MCP launcher runs `npm install` on first start if needed.
+- Enable the **letscook** MCP server in Customize after installing the plugin.
+- **v0.2**: run **`/worktree`** before **`/cook`** so work happens in a Cursor-managed checkout (`.cursor/worktrees/`), not main.
+- Add **`.cursor/worktrees.json`** (see `examples/worktrees.json.example`) for dependency setup in new worktrees.
+- Optional: copy `hooks/hooks.json.example` to your project's `.cursor/hooks.json` for `subagentStop` auto-continue.
+
+## Primary agent loop
+
+1. `get_cook_workspace_context` → `resolve_cook_workspace({ mode: "auto" })`
+2. `get_workflow_dispatch({ workspace_root })`
+3. Invoke the **bundled agent** named `cursor_agent` with returned `system_context` + `task_prompt`
+4. `submit_role_result({ workspace_root, role, raw_output })`
+5. Repeat until workflow is done, parked, or cancelled
+6. `finish_cook_workflow` → `/apply-worktree` → `/delete-worktree`
+
+Never guess `next_mandatory_role` — always use MCP dispatch/submit responses.
+
+## Bundled completion agents
+
+`completion-bootstrapper`, `completion-regrounder`, `completion-implementer`, `completion-reviewer`, `completion-auditor`, `completion-stop-judge`

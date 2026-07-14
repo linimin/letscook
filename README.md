@@ -1,77 +1,95 @@
 # letscook
 
-Cursor-native completion workflow orchestrator for the [pi-letscook](https://github.com/linimin/pi-letscook) protocol — **no Pi required**.
+Cursor plugin + MCP orchestrator for the [pi-letscook](https://github.com/linimin/pi-letscook) completion protocol — **no Pi required**.
 
-Pi remains optional for teams that want the full extension host. **letscook** targets Cursor primary agent + subagents + MCP:
+Install the plugin once; it bundles MCP server, skills, commands, rules, and optional hooks.
 
-- **Handoff**: worktree, `cook_handoff` capsule, chat confirmation
-- **Orchestrator**: `.agent/current/**` state machine, role dispatch, transcript recording
-- **Monitoring**: workflow event polling
+## Install as Cursor plugin
 
-## Architecture
-
-```text
-Cursor primary agent
-  → letscook MCP (deterministic brain)
-  → Task subagents (6 completion roles)
-  → submit_role_result → next dispatch
-```
-
-Compatible `.agent/` layout with pi-letscook so workflows can be inspected with the same protocol mental model.
-
-## Quick start
+### Option A — local install script (recommended)
 
 ```bash
 cd ~/dev/letscook
-npm install
+bash ./scripts/install-local-cursor-plugin.sh
 ```
 
-Wire MCP in Cursor (adjust `cwd`):
+Installs to `~/.cursor/plugins/local/letscook`, runs `npm install`, and wires `mcp.json` with absolute paths.
 
-```json
-{
-  "mcpServers": {
-    "letscook": {
-      "command": "npm",
-      "args": ["run", "start"],
-      "cwd": "/Users/you/dev/letscook"
-    }
-  }
-}
+### Option B — import from repo
+
+1. Open **Customize** → add/import plugins from folder
+2. Select the **letscook repository root** (contains `.cursor-plugin/marketplace.json`)
+3. Reload Cursor
+
+On first MCP start, dependencies install automatically.
+
+## After install
+
+1. **Reload Cursor** (Developer: Reload Window)
+2. **Customize** → enable **letscook** plugin
+3. **Customize** → enable **letscook** MCP server
+4. Copy worktree setup into your repo (recommended):
+   ```bash
+   mkdir -p .cursor
+   cp ~/dev/letscook/examples/worktrees.json.example .cursor/worktrees.json
+   ```
+5. (Optional) Copy hook for auto-continue:
+   ```bash
+   mkdir -p .cursor/hooks
+   cp ~/dev/letscook/hooks/cook-subagent-continue.sh .cursor/hooks/
+   cp ~/dev/letscook/hooks/hooks.json.example .cursor/hooks.json
+   ```
+
+## Workflow
+
+```text
+Plan mode → Save to workspace → /worktree <task> → /cook
+  → handoff confirm → orchestrator loop → /apply-worktree → /delete-worktree
 ```
 
-Copy `skills/cursor-orchestrator/` to `.cursor/skills/` in your project.
+| Step | What |
+|------|------|
+| Plan | `.cursor/plans/*.plan.md` — do **not** use Build locally |
+| Isolate | Cursor `/worktree` (required before `/cook`) |
+| Cook | `/cook` → `resolve_cook_workspace` → handoff → 6-role loop |
+| Finish | `finish_cook_workflow` → `/apply-worktree` → `/delete-worktree` |
+
+## Bundled resources
+
+| Component | Location |
+|-----------|----------|
+| MCP `letscook` | `mcp.json` + `scripts/start-letscook-mcp.sh` |
+| **6 completion agents** | `agents/completion-*.md` |
+| Skill `cursor-worktree-cook` | `skills/cursor-worktree-cook/` |
+| Skill `cursor-handoff` | `skills/cursor-handoff/` |
+| Skill `cursor-orchestrator` | `skills/cursor-orchestrator/` |
+| Skill `cursor-plan-handoff` | `skills/cursor-plan-handoff/` |
+| Command `/cook` | `commands/cook.md` |
+| Worktree setup example | `examples/worktrees.json.example` |
 
 ## MCP tools
 
 | Tool | Purpose |
 |------|---------|
-| `ensure_cook_worktree` | Create `.worktrees/cook-<slug>/` |
-| `prepare_cook_handoff` | Write handoff + sidecar |
-| `start_cook_workflow` | Scaffold `.agent/` (no Pi spawn) |
-| `get_workflow_dispatch` | Next role + prompts for subagent |
-| `submit_role_result` | Record output + advance state |
-| `get_workflow_status` / `poll_workflow_updates` | Monitor |
-| `park_workflow` / `resume_workflow` / `cancel_workflow` | Controls |
-
-## End-to-end flow
-
-1. Plan in Cursor on main checkout
-2. `ensure_cook_worktree` + `prepare_cook_handoff` on worktree
-3. User confirms → `start_cook_workflow`
-4. Loop: `get_workflow_dispatch` → Task subagent → `submit_role_result`
-5. `poll_workflow_updates` for status in chat
-
-## Status
-
-**v0.1 scaffold** — dispatch transitions are simplified vs full pi-letscook `release-check` parity. Structured emit validation and verifier integration are planned next.
+| `get_cook_workspace_context` | Detect main vs Cursor worktree |
+| `resolve_cook_workspace` | Pick `workspace_root` for `/cook` |
+| `finish_cook_workflow` | Apply/delete guidance when done |
+| `prepare_cook_handoff` / `confirm_cook_handoff` / `start_cook_workflow` | Handoff + native confirm UI + scaffold `.agent/` |
+| `list_cursor_plans` / `preview_plan_to_cook_handoff` | Plan → cook_handoff |
+| `get_workflow_dispatch` / `submit_role_result` | Orchestrator loop |
 
 ## Development
 
 ```bash
+npm install
 npm run typecheck
 npm test
+npm run start   # MCP stdio (for manual debugging)
 ```
+
+## Status
+
+**v0.2** — Cursor `/worktree` only (no self-managed `.worktrees/cook-*`). Dispatch simplified vs full pi-letscook `release-check`.
 
 ## License
 

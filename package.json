@@ -10,7 +10,8 @@
   "scripts": {
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "install-cursor-plugin": "bash ./scripts/install-local-cursor-plugin.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1"

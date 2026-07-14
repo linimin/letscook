@@ -1,0 +1,6 @@
+{
+  "setup-worktree": [
+    "npm ci --no-fund --no-audit 2>/dev/null || npm install --no-fund --no-audit 2>/dev/null || true",
+    "test -f \"$ROOT_WORKTREE_PATH/.env\" && cp \"$ROOT_WORKTREE_PATH/.env\" .env || true"
+  ]
+}

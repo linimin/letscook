@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "letscook": {
-      "command": "npm",
-      "args": ["run", "start"],
-      "cwd": "/absolute/path/to/letscook"
-    }
-  }
-}
