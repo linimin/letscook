@@ -29,6 +29,8 @@ fi
 printf '%s\n' "$TARGET" > "$TARGET/.letscook-package-root"
 chmod +x "$TARGET/scripts/start-letscook-mcp.sh"
 chmod +x "$TARGET/hooks/cook-subagent-continue.sh" 2>/dev/null || true
+chmod +x "$TARGET/hooks/cook-post-mcp-continue.sh" 2>/dev/null || true
+chmod +x "$TARGET/hooks/cook-stop-continue.sh" 2>/dev/null || true
 
 echo "[install-local-cursor-plugin] installing npm dependencies..."
 npm install --prefix "$TARGET" --no-fund --no-audit
@@ -64,7 +66,7 @@ Bundled resources:
             cook-handoff-boundary, completion-protocol, cursor-orchestrator, cursor-orchestrator-monitor
   - Commands: cook
   - Rule: letscook-prerequisites
-  - Hooks: subagentStop auto-continue (bundled; active when plugin is enabled)
+  - Hooks: postToolUse + subagentStop + stop sticky-continue (active when plugin is enabled)
 
 Next steps:
 1. Reload Cursor (Developer: Reload Window)

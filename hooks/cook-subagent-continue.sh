@@ -15,6 +15,6 @@ loop_count="$(echo "$input" | node -e 'let d="";process.stdin.on("data",c=>d+=c)
 
 cat <<EOF
 {
-  "followup_message": "The completion subagent finished. Continue the letscook workflow: 1) call get_workflow_dispatch with the same workspace_root; 2) if dispatch_allowed, dispatch the returned role or report workflow_closed; 3) if a role just completed but you have not submitted yet, call submit_role_result first. (auto-continue ${loop_count})"
+  "followup_message": "Letscook subagent finished. Mandatory next steps in this same conversation: 1) if not submitted yet, call submit_role_result({ workspace_root, role, raw_output }); 2) call get_workflow_dispatch({ workspace_root }); 3) if dispatch_allowed, immediately dispatch the returned cursor_agent with system_context + task_prompt — do not ask the user to continue. (auto-continue ${loop_count})"
 }
 EOF

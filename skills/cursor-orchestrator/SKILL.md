@@ -35,11 +35,18 @@ Use when the user wants a pi-letscook-style long-running workflow **without Pi**
 
 - Always thread the same `workspace_root` (Cursor worktree checkout).
 - Never guess `next_mandatory_role`; always use MCP dispatch/submit responses.
+- When `driver_continue: true` or `continuation_policy: continue`, **do not end your turn** or ask the user whether to continue — dispatch the next role immediately.
 - Dispatch the **named bundled agent** (`cursor_agent`), not a generic assistant.
 - Evaluator agents (reviewer, auditor, stop-judge) must stay read-only.
 
-## Hook pairing
+## Hook pairing (auto-continue)
 
-The plugin bundles `hooks/hooks.json` (`subagentStop` → `cook-subagent-continue.sh`). It loads automatically when letscook is enabled in Customize. Verify in **Customize → Hooks** or the Hooks output channel.
+Plugin hooks provide three layers:
 
-`hooks/hooks.json.example` is only for repos that use letscook **without** the plugin and want project-level `.cursor/hooks.json` instead.
+| Hook | When | Effect |
+|------|------|--------|
+| `postToolUse` (MCP) | After `submit_role_result` / `get_workflow_dispatch` | Injects **same-turn** sticky-continue context |
+| `subagentStop` | After Task subagent completes | Auto `followup_message` to submit + dispatch next |
+| `stop` | After primary agent turn ends | Auto user message if workflow still active |
+
+Verify in **Customize → Hooks**. `loop_limit` is `null` (no cap) for cook continue hooks.

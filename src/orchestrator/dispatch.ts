@@ -176,6 +176,11 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 		subagent_type: subagentTypeForRole(role),
 		continuation_policy: continuation,
 		workflow_entry_status: entryStatus,
+		driver_continue: continuation === "continue" || !continuation,
+		driver_continue_reason:
+			continuation === "continue"
+				? "Dispatch this role now; do not end the turn or ask the user whether to continue"
+				: undefined,
 		next_steps: [
 			`Invoke bundled agent "${role}" from the letscook plugin (Task/subagent delegation)`,
 			`Pass system_context + task_prompt in the invocation`,
@@ -301,6 +306,11 @@ export async function submitRoleResult(input: SubmitRoleResultInput): Promise<Js
 	const updated = await updateWorkflowState(input.workspace_root, statePatch);
 	const dispatch = await getWorkflowDispatch(input.workspace_root);
 
+	const driverContinue =
+		dispatch.dispatch_allowed === true &&
+		dispatch.workflow_closed !== true &&
+		(dispatch.continuation_policy === "continue" || !dispatch.continuation_policy);
+
 	return {
 		ok: true,
 		role: input.role,
@@ -308,6 +318,10 @@ export async function submitRoleResult(input: SubmitRoleResultInput): Promise<Js
 		state_patch: statePatch,
 		next_mandatory_role: asString(updated.state.next_mandatory_role),
 		workflow_closed: updated.state.project_done === true,
+		driver_continue: driverContinue,
+		driver_continue_reason: driverContinue
+			? "continuation_policy requires immediate next dispatch without asking the user"
+			: undefined,
 		dispatch,
 	};
 }

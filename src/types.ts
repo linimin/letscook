@@ -98,5 +98,8 @@ export type WorkflowDispatch = {
 	subagent_type: "generalPurpose" | "explore" | "shell";
 	continuation_policy?: string;
 	workflow_entry_status?: string;
+	workflow_closed?: boolean;
+	driver_continue?: boolean;
+	driver_continue_reason?: string;
 	next_steps: string[];
 };
