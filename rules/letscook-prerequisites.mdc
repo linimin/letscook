@@ -9,8 +9,8 @@ When using the **letscook** MCP, bundled skills, or `/cook`:
 
 - **Node.js >= 20** is required. The plugin MCP launcher runs `npm install` on first start if needed.
 - Enable the **letscook** MCP server in Customize after installing the plugin.
-- **v0.3**: run **`/worktree`** before **`/cook`** so work happens in a Cursor-managed checkout (`.cursor/worktrees/`), not main.
-- Add **`.cursor/worktrees.json`** (see `examples/worktrees.json.example`) for dependency setup in new worktrees.
+- **v0.4**: `/cook` works on main checkout; `confirm_cook_handoff` shows an isolation gate on main. Cursor `/worktree` is **recommended** for sandboxed edits, not required.
+- Add **`.cursor/worktrees.json`** (see `examples/worktrees.json.example`) when using `/worktree` for dependency setup in new worktrees.
 - **`subagentStop` hook** (orchestrator auto-continue) is bundled in the plugin (`hooks/hooks.json`) and activates when letscook is enabled in Customize.
 
 ## Primary agent loop
@@ -20,7 +20,7 @@ When using the **letscook** MCP, bundled skills, or `/cook`:
 3. Invoke the **bundled agent** named `cursor_agent` with returned `system_context` + `task_prompt`
 4. `submit_role_result({ workspace_root, role, raw_output })`
 5. Repeat until workflow is done, parked, or cancelled
-6. `finish_cook_workflow` → `/apply-worktree` → `/delete-worktree`
+6. `finish_cook_workflow` — `/apply-worktree` + `/delete-worktree` when in a Cursor worktree; otherwise review commits on the current checkout
 
 Never guess `next_mandatory_role` — always use MCP dispatch/submit responses.
 

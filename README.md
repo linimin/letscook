@@ -39,16 +39,16 @@ Hooks (`subagentStop` auto-continue for the orchestrator loop) load automaticall
 ## Workflow
 
 ```text
-Plan mode → Save to workspace → /worktree <task> → /cook
-  → synthesize handoff → confirm → orchestrator loop → /apply-worktree → /delete-worktree
+Route A: Plan → Save to workspace → /worktree <task> → /cook → confirm → orchestrator → /apply-worktree → /delete-worktree
+Route B: Plan → Save to workspace → /cook → confirm (main isolation gate if needed) → orchestrator → finish on current checkout
 ```
 
 | Step | What |
 |------|------|
 | Plan | `.cursor/plans/*.plan.md` — do **not** use Build locally |
-| Isolate | Cursor `/worktree` (required before `/cook`) |
-| Cook | `/cook` → `resolve_cook_workspace` → `synthesize_cook_handoff` → confirm → 6-role loop |
-| Finish | `finish_cook_workflow` → `/apply-worktree` → `/delete-worktree` |
+| Isolate (optional) | Cursor `/worktree` — recommended for sandboxed edits |
+| Cook | `/cook` → `resolve_cook_workspace` → `synthesize_cook_handoff` → `confirm_cook_handoff` → 6-role loop |
+| Finish | `finish_cook_workflow` → apply/delete worktree when isolated; else review commits / PR |
 
 ## Bundled resources
 
@@ -90,7 +90,7 @@ npm run start   # MCP stdio (for manual debugging)
 
 ## Status
 
-**v0.3.0** — pi-letscook protocol parity: startup synthesis, confirmation layout, mandatory dispatch, rubric transcription, control-plane defaults, and `release-check` gate. Cursor-specific: `/worktree`, MCP orchestration, elicitation + AskQuestion confirm.
+**v0.4.0** — main checkout support with `confirm_cook_handoff` isolation gate (`start_on_main` / `defer_worktree`); optional `/worktree` (recommended, not required). Prior: pi-letscook protocol parity, MCP orchestration, elicitation + AskQuestion confirm.
 
 ## License
 
