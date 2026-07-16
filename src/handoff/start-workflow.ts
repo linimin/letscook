@@ -29,6 +29,7 @@ async function readHandoffCapsule(workspaceRoot: string) {
 export async function startCookWorkflowFromHandoff(
 	workspaceRoot: string,
 	confirmationId: string,
+	options?: { isolationChoice?: string },
 ): Promise<StartCookWorkflowResult> {
 	const resolvedRoot = path.resolve(workspaceRoot);
 	const sidecar = await readCookHandoffSidecar(resolvedRoot);
@@ -38,6 +39,9 @@ export async function startCookWorkflowFromHandoff(
 
 	await markHandoffConfirmed(resolvedRoot, confirmationId);
 	const capsule = await readHandoffCapsule(resolvedRoot);
+	if (options?.isolationChoice) {
+		capsule.isolation_choice = options.isolationChoice;
+	}
 	const projectName = path.basename(resolvedRoot);
 	const snapshot = await scaffoldWorkflowFromHandoff(resolvedRoot, capsule, projectName);
 	await markHandoffKickoffStarted(resolvedRoot, confirmationId);

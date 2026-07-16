@@ -12,6 +12,8 @@ export type GitWorktreeEntry = {
 	isMain: boolean;
 };
 
+export type CookWorkspaceIsolationStatus = "main" | "linked_other" | "cursor";
+
 export type CookWorkspaceContext = {
 	workspace_root: string;
 	main_repo_root: string;
@@ -19,6 +21,8 @@ export type CookWorkspaceContext = {
 	is_linked_worktree: boolean;
 	is_main_checkout: boolean;
 	worktree_kind: "main" | "cursor" | "other_linked";
+	isolation_status: CookWorkspaceIsolationStatus;
+	isolation_confirm_required: boolean;
 	worktree_path?: string;
 	ready_for_cook: boolean;
 	recommended_mode: CookWorkspaceMode;
@@ -34,7 +38,10 @@ export type ResolveCookWorkspaceResult =
 			main_repo_root: string;
 			branch: string;
 			worktree_kind: CookWorkspaceContext["worktree_kind"];
+			isolation_status: CookWorkspaceIsolationStatus;
+			isolation_confirm_required: boolean;
 			messages: string[];
+			warnings?: string[];
 	  }
 	| {
 			ok: false;
@@ -136,6 +143,8 @@ export function getCookWorkspaceContext(args?: {
 			is_linked_worktree: false,
 			is_main_checkout: true,
 			worktree_kind: "main",
+			isolation_status: "main",
+			isolation_confirm_required: false,
 			ready_for_cook: false,
 			recommended_mode: "cursor_native",
 			messages: ["not inside a git repository"],
@@ -157,9 +166,18 @@ export function getCookWorkspaceContext(args?: {
 	let readyForCook = false;
 	const recommendedMode: CookWorkspaceMode = "cursor_native";
 
+	const isolationStatus: CookWorkspaceIsolationStatus = isMainCheckout
+		? "main"
+		: worktreeKind === "cursor"
+			? "cursor"
+			: "linked_other";
+
 	if (isMainCheckout) {
+		readyForCook = true;
 		messages.push("current checkout is the main worktree");
-		next_steps.push("Run Cursor `/worktree <task summary>` in this chat before `/cook`");
+		messages.push("Cook can start on main checkout, but isolation is recommended");
+		next_steps.push("Optional: run Cursor `/worktree <task summary>` before `/cook` for sandboxed edits");
+		next_steps.push("If you continue on main, confirm_cook_handoff will ask for an explicit isolation decision");
 	} else if (worktreeKind === "cursor") {
 		readyForCook = true;
 		messages.push("running in a Cursor-managed worktree (.cursor/worktrees/)");
@@ -179,6 +197,8 @@ export function getCookWorkspaceContext(args?: {
 		is_linked_worktree: isLinkedWorktree,
 		is_main_checkout: isMainCheckout,
 		worktree_kind: worktreeKind,
+		isolation_status: isolationStatus,
+		isolation_confirm_required: isMainCheckout,
 		worktree_path: isLinkedWorktree ? workspaceRoot : undefined,
 		ready_for_cook: readyForCook,
 		recommended_mode: recommendedMode,
@@ -198,30 +218,29 @@ export async function resolveCookWorkspace(args: {
 		cwd: args.repoRoot,
 	});
 
-	const useLinked =
-		mode === "cursor_native" ? context.is_linked_worktree : context.is_linked_worktree;
-
-	if (useLinked) {
+	if (!context.ready_for_cook) {
 		return {
-			ok: true,
+			ok: false,
 			mode,
-			workspace_root: context.workspace_root,
-			main_repo_root: context.main_repo_root,
-			branch: context.branch,
-			worktree_kind: context.worktree_kind,
-			messages: context.messages,
+			error: "workspace is not ready for /cook",
+			context,
+			next_steps: context.next_steps,
 		};
 	}
 
+	const warnings = context.isolation_confirm_required ? ["main_checkout_isolation_recommended"] : undefined;
+
 	return {
-		ok: false,
+		ok: true,
 		mode,
-		error: "cook requires an isolated worktree; main checkout is not allowed",
-		context,
-		next_steps: [
-			"Run Cursor `/worktree <short task summary>` in this chat (creates .cursor/worktrees/...)",
-			"Then run `/cook` again in the same worktree chat",
-		],
+		workspace_root: context.workspace_root,
+		main_repo_root: context.main_repo_root,
+		branch: context.branch,
+		worktree_kind: context.worktree_kind,
+		isolation_status: context.isolation_status,
+		isolation_confirm_required: context.isolation_confirm_required,
+		messages: context.messages,
+		warnings,
 	};
 }
 
@@ -253,6 +272,11 @@ export function buildFinishCookWorkflowGuide(args: {
 		next_steps.push(`git worktree remove ${context.workspace_root}`);
 		next_steps.push("git worktree prune");
 		warnings.push("prefer Cursor `/worktree` for future cooks so `/delete-worktree` handles cleanup");
+	} else if (context.is_main_checkout) {
+		next_steps.push("Review local commits on this checkout");
+		next_steps.push("Push and open a PR, or merge when ready");
+		warnings.push("workflow ran on main checkout; there is no /apply-worktree merge step");
+		warnings.push(".agent/ cleanup after workflow closure is expected; do not treat it as a missing-repo anomaly");
 	} else {
 		next_steps.push("No linked worktree detected; nothing to remove");
 	}

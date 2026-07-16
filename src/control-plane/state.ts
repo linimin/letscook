@@ -196,6 +196,9 @@ export function defaultStartupBrief(
 		evaluation_profile: routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
 		why_cook_now: asString(handoff.why_cook_now),
 		handoff_source: "letscook-mcp",
+		...(asString(handoff.isolation_choice)
+			? { isolation_choice: asString(handoff.isolation_choice) }
+			: {}),
 	};
 }
 

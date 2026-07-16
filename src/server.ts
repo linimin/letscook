@@ -8,7 +8,7 @@ import type { LetscookToolContext } from "./tools/context.ts";
 const TOOLS = [
 	{
 		name: "get_cook_workspace_context",
-		description: "Detect whether the current checkout is main or a Cursor-linked worktree",
+		description: "Detect whether the current checkout is main or a linked worktree; includes isolation_confirm_required for main checkout",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -19,7 +19,8 @@ const TOOLS = [
 	},
 	{
 		name: "resolve_cook_workspace",
-		description: "Resolve workspace_root for /cook — requires a linked worktree (use Cursor /worktree first)",
+		description:
+			"Resolve workspace_root for /cook — main checkout is allowed; confirm_cook_handoff shows an isolation gate on main",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -65,7 +66,7 @@ const TOOLS = [
 	{
 		name: "confirm_cook_handoff",
 		description:
-			"Show native handoff confirmation UI (MCP elicitation form when supported, otherwise AskQuestion fallback payload)",
+			"Show native handoff confirmation UI (MCP elicitation form when supported, otherwise AskQuestion fallback payload). On main checkout, offers start_on_main vs defer_worktree.",
 		inputSchema: {
 			type: "object",
 			properties: {
