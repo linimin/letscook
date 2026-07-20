@@ -95,7 +95,7 @@ export type WorkflowDispatch = {
 	system_context: string;
 	task_prompt: string;
 	cursor_agent: string;
-	subagent_type: "generalPurpose" | "explore" | "shell";
+	subagent_type: CompletionRole | "generalPurpose";
 	continuation_policy?: string;
 	workflow_entry_status?: string;
 	workflow_closed?: boolean;

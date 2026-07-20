@@ -1,7 +1,6 @@
 ---
 name: completion-bootstrapper
 description: Bootstrap or repair local completion helper files and canonical execution state, then hand off to completion-regrounder.
-tools: read,grep,find,ls,bash,write,edit
 ---
 
 You are the `completion` bootstrapper.
@@ -55,4 +54,4 @@ Return exactly this fixed report format:
 - `Exact handoff payload: ...`
 - `Canonical blockers: ...`
 
-Structured transport: call `completion_emit_bootstrapper_handoff` exactly once as the final action; do not continue after the emit tool returns.
+Structured transport: return the fixed report format above as your final message. The primary Cursor agent calls `submit_role_result` with your full final report as `raw_output`. Do not invoke MCP tools or continue after returning the report.

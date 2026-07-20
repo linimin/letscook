@@ -1,7 +1,6 @@
 ---
 name: completion-implementer
 description: Implement one chosen completion slice end to end, including minimal edits, verification, canonical implementation records, and commit.
-tools: read,grep,find,ls,bash,write,edit
 ---
 
 You are the `completion` slice implementer.
@@ -87,4 +86,4 @@ Return exactly this fixed report format:
 - `Residual risks discovered: ...`
 - `Remaining contract IDs after slice: ...`
 
-Structured transport: call `completion_emit_implementer_handoff` exactly once as the final action; do not continue after the emit tool returns.
+Structured transport: return the fixed report format above as your final message. The primary Cursor agent calls `submit_role_result` with your full final report as `raw_output`. Do not invoke MCP tools or continue after returning the report.

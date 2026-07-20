@@ -28,12 +28,6 @@ function isCompletionRole(value: string | undefined): value is CompletionRole {
 	return Boolean(value && ROLE_SET.has(value));
 }
 
-function subagentTypeForRole(role: CompletionRole): WorkflowDispatch["subagent_type"] {
-	if (role === "completion-implementer" || role === "completion-bootstrapper") return "generalPurpose";
-	if (role === "completion-regrounder") return "generalPurpose";
-	return "explore";
-}
-
 function readRoleFromState(snapshot: WorkflowSnapshot): CompletionRole | null {
 	const role = asString(snapshot.state.next_mandatory_role);
 	return isCompletionRole(role) ? role : null;
@@ -173,7 +167,7 @@ export async function getWorkflowDispatch(workspaceRoot: string): Promise<Workfl
 		system_context: buildRoleSystemContext(snapshot, role),
 		task_prompt: buildRoleTaskPrompt(snapshot, role),
 		cursor_agent: role,
-		subagent_type: subagentTypeForRole(role),
+		subagent_type: role,
 		continuation_policy: continuation,
 		workflow_entry_status: entryStatus,
 		driver_continue: continuation === "continue" || !continuation,
