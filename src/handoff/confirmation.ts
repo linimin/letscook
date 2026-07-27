@@ -9,10 +9,12 @@ import { getCookWorkspaceContext } from "../worktree.ts";
 import {
 	buildConfirmationPreview,
 	cancelPendingHandoff,
+	markHandoffConfirmed,
 	normalizeCookHandoffCapsule,
 	readCookHandoffSidecar,
 } from "./capsule.ts";
 import { cancelCookHandoff, startCookWorkflowFromHandoff } from "./start-workflow.ts";
+import { loadWorkflowSnapshot, isWorkflowActivelyRunning, isWorkflowParked } from "../control-plane/state.ts";
 
 export type PendingHandoff = {
 	workspaceRoot: string;
@@ -226,12 +228,16 @@ function clientSupportsFormElicitation(ctx: LetscookToolContext): boolean {
 
 type ConfirmationAction = "start" | "cancel" | "edit" | "defer_worktree";
 
-function readElicitationAction(content: unknown): ConfirmationAction {
+function readElicitationAction(
+	content: unknown,
+	options?: { isolationConfirmRequired?: boolean },
+): ConfirmationAction {
 	const action = asString((content as JsonRecord | undefined)?.action)?.toLowerCase();
 	if (action === "start_on_main") return "start";
 	if (action === "defer_worktree") return "defer_worktree";
 	if (action === "cancel" || action === "edit") return action;
-	return "start";
+	if (action === "start") return "start";
+	return options?.isolationConfirmRequired ? "defer_worktree" : "start";
 }
 
 function confirmationOptionsFor(pending: PendingHandoff): HandoffConfirmationOptions {
@@ -253,14 +259,16 @@ function buildAskQuestionFallback(pending: PendingHandoff): JsonRecord {
 		next_steps: options.isolationConfirmRequired
 			? [
 					"Call AskQuestion with ask_question payload",
-					"On start_on_main: start_cook_workflow({ workspace_root, confirmation_id, action: 'start' })",
-					"On defer_worktree: do not start; guide user through /worktree then /cook",
+					"On start_on_main: confirm_cook_handoff({ workspace_root, skip_elicitation: true, confirmation_action: 'start' })",
+					"Then start_cook_workflow({ workspace_root, confirmation_id, action: 'start', isolation_choice: 'main_checkout_acknowledged' })",
+					"On defer_worktree: confirm_cook_handoff({ workspace_root, skip_elicitation: true, confirmation_action: 'defer_worktree' })",
 					"On cancel: start_cook_workflow({ workspace_root, action: 'cancel' })",
 					"On edit: revise capsule/plan and call prepare_cook_handoff again",
 				]
 			: [
 					"Call AskQuestion with ask_question payload",
-					"On start: start_cook_workflow({ workspace_root, confirmation_id, action: 'start' })",
+					"On start: confirm_cook_handoff({ workspace_root, skip_elicitation: true, confirmation_action: 'start' })",
+					"Then start_cook_workflow({ workspace_root, confirmation_id, action: 'start' })",
 					"On cancel: start_cook_workflow({ workspace_root, action: 'cancel' })",
 					"On edit: revise capsule/plan and call prepare_cook_handoff again",
 				],
@@ -271,6 +279,7 @@ async function handleConfirmationAction(
 	pending: PendingHandoff,
 	action: ConfirmationAction,
 	confirmationMethod: "mcp_elicitation" | "ask_question",
+	options?: { deferStart?: boolean },
 ): Promise<JsonRecord> {
 	if (action === "defer_worktree") {
 		await cancelPendingHandoff(pending.workspaceRoot);
@@ -314,10 +323,94 @@ async function handleConfirmationAction(
 			],
 		};
 	}
+	if (action === "start" && !pending.workspaceContext.ready_for_cook) {
+		return {
+			ok: false,
+			error: "workspace is not ready for cook",
+			code: "workspace_not_ready",
+			workspace_root: pending.workspaceRoot,
+			confirmation_id: pending.sidecar.confirmation_id,
+			next_steps: pending.workspaceContext.next_steps,
+		};
+	}
+
+	const existingWorkflow = await loadWorkflowSnapshot(pending.workspaceRoot);
+	if (action === "start" && existingWorkflow && isWorkflowParked(existingWorkflow)) {
+		if (options?.deferStart) {
+			return {
+				ok: true,
+				confirmed: false,
+				workflow_parked: true,
+				action: pending.workspaceContext.isolation_confirm_required ? "start_on_main" : "start",
+				confirmation_method: confirmationMethod,
+				workspace_root: pending.workspaceRoot,
+				confirmation_id: pending.sidecar.confirmation_id,
+				layout: pending.layout,
+				next_steps: [
+					"Workflow is parked; call resume_workflow to continue the existing workflow, or cancel_workflow before preparing a new cook",
+				],
+			};
+		}
+		return {
+			ok: false,
+			error: "workflow is parked",
+			code: "workflow_parked",
+			workspace_root: pending.workspaceRoot,
+			confirmation_id: pending.sidecar.confirmation_id,
+			next_steps: [
+				"Resume with resume_workflow to continue the parked workflow",
+				"Or cancel_workflow before confirming a new cook start",
+			],
+		};
+	}
 
 	const isolationChoice = pending.workspaceContext.isolation_confirm_required
 		? "main_checkout_acknowledged"
 		: undefined;
+	if (pending.sidecar.status === "kickoff_started" || (await loadWorkflowSnapshot(pending.workspaceRoot))) {
+		const activeWorkflow = await loadWorkflowSnapshot(pending.workspaceRoot);
+		if (activeWorkflow && isWorkflowActivelyRunning(activeWorkflow)) {
+			if (options?.deferStart) {
+				return {
+					ok: true,
+					confirmed: false,
+					workflow_already_active: true,
+					action: pending.workspaceContext.isolation_confirm_required ? "start_on_main" : "start",
+					confirmation_method: confirmationMethod,
+					workspace_root: pending.workspaceRoot,
+					confirmation_id: pending.sidecar.confirmation_id,
+					layout: pending.layout,
+					next_steps: [
+						"Workflow already active; continue with get_workflow_dispatch → claim_workflow_dispatch → submit_role_result",
+					],
+				};
+			}
+			return {
+				ok: false,
+				error: "workflow already active",
+				code: "workflow_active",
+				workspace_root: pending.workspaceRoot,
+				confirmation_id: pending.sidecar.confirmation_id,
+			};
+		}
+	}
+	await markHandoffConfirmed(pending.workspaceRoot, pending.sidecar.confirmation_id);
+	if (options?.deferStart) {
+		return {
+			ok: true,
+			confirmed: true,
+			action: pending.workspaceContext.isolation_confirm_required ? "start_on_main" : "start",
+			confirmation_method: confirmationMethod,
+			workspace_root: pending.workspaceRoot,
+			confirmation_id: pending.sidecar.confirmation_id,
+			layout: pending.layout,
+			next_steps: pending.workspaceContext.isolation_confirm_required
+				? [
+						"start_cook_workflow({ workspace_root, confirmation_id, action: 'start', isolation_choice: 'main_checkout_acknowledged' })",
+					]
+				: ["start_cook_workflow({ workspace_root, confirmation_id, action: 'start' })"],
+		};
+	}
 	const started = await startCookWorkflowFromHandoff(
 		pending.workspaceRoot,
 		pending.sidecar.confirmation_id,
@@ -335,7 +428,10 @@ async function handleConfirmationAction(
 export async function confirmCookHandoff(
 	workspaceRoot: string,
 	ctx: LetscookToolContext,
-	options?: { skip_elicitation?: boolean },
+	options?: {
+		skip_elicitation?: boolean;
+		confirmation_action?: ConfirmationAction | "start_on_main";
+	},
 ): Promise<JsonRecord> {
 	const pending = await readPendingHandoff(workspaceRoot);
 	if (!pending) {
@@ -343,6 +439,12 @@ export async function confirmCookHandoff(
 	}
 
 	const confirmOptions = confirmationOptionsFor(pending);
+
+	if (options?.confirmation_action) {
+		const action: ConfirmationAction =
+			options.confirmation_action === "start_on_main" ? "start" : options.confirmation_action;
+		return handleConfirmationAction(pending, action, "ask_question", { deferStart: true });
+	}
 
 	if (!options?.skip_elicitation && clientSupportsFormElicitation(ctx) && ctx.elicitInput) {
 		try {
@@ -353,7 +455,7 @@ export async function confirmCookHandoff(
 			if (result.action === "accept") {
 				return handleConfirmationAction(
 					pending,
-					readElicitationAction(result.content),
+					readElicitationAction(result.content, confirmOptions),
 					"mcp_elicitation",
 				);
 			}

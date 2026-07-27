@@ -57,6 +57,20 @@ test("getCookWorkspaceContext allows main checkout with isolation confirm", asyn
 	}
 });
 
+test("getCookWorkspaceContext rejects repo without commits", async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), "letscook-wt-empty-"));
+	try {
+		runGit(root, ["init"]);
+		runGit(root, ["config", "user.email", "test@example.com"]);
+		runGit(root, ["config", "user.name", "Test User"]);
+		const context = getCookWorkspaceContext({ workspaceRoot: root });
+		assert.equal(context.ready_for_cook, false);
+		assert.match(context.messages.join(" "), /no commits/i);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test("resolveCookWorkspace succeeds on main checkout with warning", async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), "letscook-wt-resolve-"));
 	try {

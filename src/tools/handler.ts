@@ -10,7 +10,7 @@ import {
 	validateCookHandoffSchema,
 	writeCookHandoffFile,
 } from "../handoff/capsule.ts";
-import { confirmCookHandoff, formatConfirmationBrief } from "../handoff/confirmation.ts";
+import { confirmCookHandoff, formatConfirmationBrief, buildIsolationConfirmationSection } from "../handoff/confirmation.ts";
 import {
 	getHandoffSynthesisPrompt,
 	submitStartupAnalysis,
@@ -21,6 +21,7 @@ import { cancelCookHandoff, startCookWorkflowFromHandoff } from "../handoff/star
 import type { LetscookToolContext } from "./context.ts";
 import {
 	cancelWorkflow,
+	claimWorkflowDispatch,
 	getWorkflowDispatch,
 	getWorkflowStatus,
 	parkWorkflow,
@@ -39,6 +40,16 @@ import {
 	getCookWorkspaceContext,
 	resolveCookWorkspace,
 } from "../worktree.ts";
+
+function confirmationLayoutForWorkspace(workspaceRoot: string, capsule: ReturnType<typeof normalizeCookHandoffCapsule>) {
+	const layout = buildConfirmationPreview(capsule);
+	const workspaceContext = getCookWorkspaceContext({ workspaceRoot });
+	const isolationConfirmRequired = workspaceContext.isolation_confirm_required;
+	if (isolationConfirmRequired) {
+		layout.isolation_section = buildIsolationConfirmationSection(workspaceContext);
+	}
+	return { layout, confirmOptions: { isolationConfirmRequired } };
+}
 
 function textResult(payload: unknown) {
 	return {
@@ -109,13 +120,14 @@ export async function handleLetscookTool(
 					workspace_root: workspaceRoot,
 					branch: typeof args.branch === "string" ? args.branch : undefined,
 				});
+				const { layout, confirmOptions } = confirmationLayoutForWorkspace(workspaceRoot, capsule);
 				return textResult({
 					ok: true,
 					workspace_root: workspaceRoot,
 					confirmation_id: written.confirmationId,
 					handoff_sha256: written.handoffSha256,
-					confirmation_preview: buildConfirmationPreview(capsule),
-					confirmation_brief: formatConfirmationBrief(buildConfirmationPreview(capsule)),
+					confirmation_preview: layout,
+					confirmation_brief: formatConfirmationBrief(layout, confirmOptions),
 					next_steps: [
 						"Call confirm_cook_handoff({ workspace_root }) for MCP elicitation or AskQuestion fallback",
 					],
@@ -123,8 +135,15 @@ export async function handleLetscookTool(
 			}
 			case "confirm_cook_handoff": {
 				const workspaceRoot = requireWorkspaceRoot(args);
+				const confirmationActionRaw = asString(args.confirmation_action);
+				const confirmationAction =
+					confirmationActionRaw === "start_on_main" ? "start" : confirmationActionRaw;
+				const allowedActions = new Set(["start", "start_on_main", "cancel", "edit", "defer_worktree"]);
 				const result = await confirmCookHandoff(workspaceRoot, ctx, {
 					skip_elicitation: args.skip_elicitation === true,
+					...(confirmationActionRaw && allowedActions.has(confirmationActionRaw)
+						? { confirmation_action: confirmationAction as "start" | "cancel" | "edit" | "defer_worktree" }
+						: {}),
 				});
 				if (result.ok === false) return toolError(asString(result.error) ?? "confirm failed", asString(result.code));
 				return textResult(result);
@@ -138,13 +157,13 @@ export async function handleLetscookTool(
 					"utf8",
 				);
 				const capsule = normalizeCookHandoffCapsule(JSON.parse(handoffRaw) as Record<string, unknown>);
-				const layout = buildConfirmationPreview(capsule);
+				const { layout, confirmOptions } = confirmationLayoutForWorkspace(workspaceRoot, capsule);
 				return textResult({
 					ok: true,
 					workspace_root: workspaceRoot,
 					confirmation_id: sidecar.confirmation_id,
 					layout,
-					confirmation_brief: formatConfirmationBrief(layout),
+					confirmation_brief: formatConfirmationBrief(layout, confirmOptions),
 					next_steps: ["Call confirm_cook_handoff({ workspace_root }) to show native confirmation UI"],
 				});
 			}
@@ -161,6 +180,12 @@ export async function handleLetscookTool(
 				if (sidecar.workspace_root !== path.resolve(workspaceRoot)) {
 					return toolError("workspace_root does not match sidecar", "workspace_mismatch");
 				}
+				if (sidecar.status !== "confirmed") {
+					return toolError(
+						"handoff not confirmed: call confirm_cook_handoff before start_cook_workflow",
+						"confirmation_required",
+					);
+				}
 				if (args.dry_run === true) {
 					return textResult({
 						ok: true,
@@ -170,9 +195,22 @@ export async function handleLetscookTool(
 						would_scaffold: true,
 					});
 				}
+				const isolationChoice = asString(args.isolation_choice);
+				const workspaceContext = getCookWorkspaceContext({ workspaceRoot });
+				if (
+					workspaceContext.isolation_confirm_required &&
+					isolationChoice !== "main_checkout_acknowledged"
+				) {
+					return toolError(
+						"isolation_choice must be main_checkout_acknowledged on main checkout; use confirm_cook_handoff first",
+						"isolation_required",
+					);
+				}
 				return textResult({
 					ok: true,
-					...(await startCookWorkflowFromHandoff(workspaceRoot, confirmationId)),
+					...(await startCookWorkflowFromHandoff(workspaceRoot, confirmationId, {
+						...(isolationChoice ? { isolationChoice } : {}),
+					})),
 				});
 			}
 			case "get_cook_handoff_status": {
@@ -275,6 +313,14 @@ export async function handleLetscookTool(
 				);
 			case "get_workflow_dispatch":
 				return textResult({ ok: true, ...(await getWorkflowDispatch(requireWorkspaceRoot(args))) });
+			case "claim_workflow_dispatch":
+				return textResult({
+					ok: true,
+					...(await claimWorkflowDispatch({
+						workspace_root: requireWorkspaceRoot(args),
+						force: args.force === true,
+					})),
+				});
 			case "submit_role_result":
 				return textResult({
 					ok: true,
@@ -282,6 +328,7 @@ export async function handleLetscookTool(
 						workspace_root: requireWorkspaceRoot(args),
 						role: asString(args.role) ?? "",
 						raw_output: asString(args.raw_output) ?? "",
+						dispatch_key: asString(args.dispatch_key),
 						ok: args.ok !== false,
 						structured: typeof args.structured === "object" && args.structured !== null ? (args.structured as Record<string, unknown>) : undefined,
 					})),

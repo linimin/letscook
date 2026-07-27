@@ -10,7 +10,7 @@
   "scripts": {
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test 'src/**/*.test.ts' 'src/*.test.ts'",
+    "test": "tsx --test 'src/**/*.test.ts' 'src/*.test.ts' 'hooks/**/*.test.mjs'",
     "release-check": "bash scripts/release-check.sh",
     "install-cursor-plugin": "bash ./scripts/install-local-cursor-plugin.sh"
   },

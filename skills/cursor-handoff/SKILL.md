@@ -52,9 +52,10 @@ If the response includes `elicitation_unavailable: true` or `user_action_require
 
 1. Show `confirmation_brief` in chat (optional; it is also embedded in `ask_question`)
 2. **Must** call **`AskQuestion`** with the returned `ask_question` payload
-3. Map the user's choice:
-   - `start` or `start_on_main` → `start_cook_workflow({ workspace_root, confirmation_id, action: "start" })`
-   - `defer_worktree` → **do not** start; tell user to run `/worktree` then `/cook` again
+3. Map the user's choice — **record confirmation first**, then start:
+   - `start` → `confirm_cook_handoff({ workspace_root, skip_elicitation: true, confirmation_action: "start" })` then `start_cook_workflow({ workspace_root, confirmation_id, action: "start" })`
+   - `start_on_main` → `confirm_cook_handoff({ workspace_root, skip_elicitation: true, confirmation_action: "start_on_main" })` then `start_cook_workflow({ workspace_root, confirmation_id, action: "start", isolation_choice: "main_checkout_acknowledged" })`
+   - `defer_worktree` → `confirm_cook_handoff({ workspace_root, skip_elicitation: true, confirmation_action: "defer_worktree" })`
    - `cancel` → `start_cook_workflow({ workspace_root, action: "cancel" })`
    - `edit` → stop; revise capsule/plan, then `prepare_cook_handoff` again
 

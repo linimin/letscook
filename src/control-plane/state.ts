@@ -78,7 +78,26 @@ export async function loadWorkflowSnapshot(root: string): Promise<WorkflowSnapsh
 	const plan = (await readJsonFile(files.planPath)) ?? {};
 	const active = (await readJsonFile(files.activePath)) ?? {};
 	const startupBrief = (await readJsonFile(files.startupBriefPath)) ?? {};
-	return { files, state, plan, active, startupBrief };
+	const profile = (await readJsonFile(path.join(files.agentDir, "profile.json"))) ?? {};
+	return { files, state, plan, active, startupBrief, profile };
+}
+
+export function isWorkflowActivelyRunning(snapshot: WorkflowSnapshot): boolean {
+	const entryStatus = asString(snapshot.state.workflow_entry_status);
+	const continuation = asString(snapshot.state.continuation_policy);
+	if (entryStatus === "parked" || continuation === "paused") {
+		return false;
+	}
+	if (entryStatus === "cancelled" || continuation === "done" || snapshot.state.project_done === true) {
+		return false;
+	}
+	return true;
+}
+
+export function isWorkflowParked(snapshot: WorkflowSnapshot): boolean {
+	const entryStatus = asString(snapshot.state.workflow_entry_status);
+	const continuation = asString(snapshot.state.continuation_policy);
+	return entryStatus === "parked" || continuation === "paused";
 }
 
 function buildWorkflowSessionId(): string {

@@ -16,13 +16,14 @@ When using the **letscook** MCP, bundled skills, or `/cook`:
 ## Primary agent loop
 
 1. `get_cook_workspace_context` → `resolve_cook_workspace({ mode: "auto" })`
-2. `get_workflow_dispatch({ workspace_root })`
-3. Invoke the **bundled agent** named `cursor_agent` with returned `system_context` + `task_prompt`
-4. `submit_role_result({ workspace_root, role, raw_output })`
-5. Repeat until workflow is done, parked, or cancelled
-6. `finish_cook_workflow` — `/apply-worktree` + `/delete-worktree` when in a Cursor worktree; otherwise review commits on the current checkout
+2. `get_workflow_dispatch({ workspace_root })` — preflight only
+3. `claim_workflow_dispatch({ workspace_root })` — required before Task
+4. Invoke the **bundled agent** named `cursor_agent` with returned `system_context` + `task_prompt`
+5. `submit_role_result({ workspace_root, role, raw_output })`
+6. Repeat until workflow is done, parked, or cancelled
+7. `finish_cook_workflow` — `/apply-worktree` + `/delete-worktree` when in a Cursor worktree; otherwise review commits on the current checkout
 
-Never guess `next_mandatory_role` — always use MCP dispatch/submit responses.
+Never guess `next_mandatory_role` — always use MCP dispatch/submit responses. Never open a second Task for the same `dispatch_key` while `dispatch_in_flight` is set.
 
 ## Bundled completion agents
 

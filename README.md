@@ -76,7 +76,7 @@ Route B: Plan → Save to workspace → /cook → confirm (main isolation gate i
 | `prepare_cook_handoff` / `confirm_cook_handoff` / `start_cook_workflow` | Handoff + native confirm UI + scaffold `.agent/` |
 | `get_handoff_synthesis_prompt` / `submit_startup_analysis` / `synthesize_cook_handoff` / `validate_cook_handoff` | Startup synthesis (pi parity, fail-closed) |
 | `list_cursor_plans` / `preview_plan_to_cook_handoff` | Plan → synthesis input |
-| `get_workflow_dispatch` / `submit_role_result` | Orchestrator loop |
+| `get_workflow_dispatch` / `claim_workflow_dispatch` / `submit_role_result` | Orchestrator loop (preflight → claim → Task → submit) |
 
 ## Development
 

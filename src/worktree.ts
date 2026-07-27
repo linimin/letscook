@@ -165,6 +165,8 @@ export function getCookWorkspaceContext(args?: {
 
 	let readyForCook = false;
 	const recommendedMode: CookWorkspaceMode = "cursor_native";
+	const headResult = runGit(workspaceRoot, ["rev-parse", "HEAD"]);
+	const hasGitHead = headResult.ok && headResult.stdout.length > 0;
 
 	const isolationStatus: CookWorkspaceIsolationStatus = isMainCheckout
 		? "main"
@@ -173,21 +175,36 @@ export function getCookWorkspaceContext(args?: {
 			: "linked_other";
 
 	if (isMainCheckout) {
-		readyForCook = true;
+		readyForCook = hasGitHead;
 		messages.push("current checkout is the main worktree");
-		messages.push("Cook can start on main checkout, but isolation is recommended");
-		next_steps.push("Optional: run Cursor `/worktree <task summary>` before `/cook` for sandboxed edits");
-		next_steps.push("If you continue on main, confirm_cook_handoff will ask for an explicit isolation decision");
+		if (!hasGitHead) {
+			messages.push("git repository has no commits yet");
+			next_steps.push("Create an initial commit before running /cook");
+		} else {
+			messages.push("Cook can start on main checkout, but isolation is recommended");
+			next_steps.push("Optional: run Cursor `/worktree <task summary>` before `/cook` for sandboxed edits");
+			next_steps.push("If you continue on main, confirm_cook_handoff will ask for an explicit isolation decision");
+		}
 	} else if (worktreeKind === "cursor") {
-		readyForCook = true;
+		readyForCook = hasGitHead;
 		messages.push("running in a Cursor-managed worktree (.cursor/worktrees/)");
-		next_steps.push("Use workspace_root from this context for prepare_cook_handoff and orchestrator tools");
-		next_steps.push("When done: `/apply-worktree` then `/delete-worktree`");
+		if (!hasGitHead) {
+			messages.push("git repository has no commits yet");
+			next_steps.push("Create an initial commit before running /cook");
+		} else {
+			next_steps.push("Use workspace_root from this context for prepare_cook_handoff and orchestrator tools");
+			next_steps.push("When done: `/apply-worktree` then `/delete-worktree`");
+		}
 	} else {
-		readyForCook = true;
+		readyForCook = hasGitHead;
 		messages.push("running in a linked git worktree (not Cursor-managed)");
-		next_steps.push("Use this workspace_root for the letscook workflow");
-		next_steps.push("Prefer Cursor `/worktree` for automatic setup and cleanup");
+		if (!hasGitHead) {
+			messages.push("git repository has no commits yet");
+			next_steps.push("Create an initial commit before running /cook");
+		} else {
+			next_steps.push("Use this workspace_root for the letscook workflow");
+			next_steps.push("Prefer Cursor `/worktree` for automatic setup and cleanup");
+		}
 	}
 
 	return {

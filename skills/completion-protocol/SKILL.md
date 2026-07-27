@@ -5,7 +5,7 @@ description: Shared completion workflow protocol for long-running coding tasks w
 
 # Completion Protocol
 
-> **Cursor adapter:** In letscook, the primary agent orchestrates via MCP (`get_workflow_dispatch`, `submit_role_result`) and bundled completion subagents — not Pi `completion_role` / `completion_emit_*` tools. Protocol truth in `.agent/**` and this skill is identical to pi-letscook.
+> **Cursor adapter:** In letscook, the primary agent orchestrates via MCP (`get_workflow_dispatch`, `claim_workflow_dispatch`, `submit_role_result`) and bundled completion subagents — not Pi `completion_role` / `completion_emit_*` tools. Protocol truth in `.agent/**` and this skill is identical to pi-letscook.
 
 Load this skill only after the user explicitly enters `/cook` and you are operating inside the `completion` workflow as the workflow driver or a completion role.
 
@@ -44,6 +44,16 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - Keep slice-specific proof in repo tests or deterministic checks. Refresh `.agent/verify_completion_stop.sh` only when the repo's top-level verification surfaces change or the verifier becomes stale.
 - The workflow topology is flat and primary-driven: the main pi session remains the workflow root and invokes at most one completion role at a time.
 - No completion role may invoke another completion role during the normal workflow.
+
+## Cursor orchestrator adapter
+
+When the workflow driver is the Cursor primary agent (letscook MCP), enforce these additions on top of the rules above:
+
+- **At most one in-flight Cursor Task per dispatch key** `(role, active_slice_id, git HEAD)`. Background Tasks (`run_in_background: true`) still count as in-flight.
+- **MCP claim is dispatch authority**: `claim_workflow_dispatch` must succeed before launching a bundled completion agent. Hooks are reminders only, not permission to dispatch.
+- **Stale notification**: a hook or followup suggesting a role is stale when that role already appears in `slice-history.jsonl` for the current `dispatch_key`, or when `state.json next_mandatory_role` no longer matches. On stale input, re-read canonical `.agent/**` state; do not re-dispatch the same role.
+- **Submit clears in-flight**: `submit_role_result` is the only normal path that clears `dispatch_in_flight` and advances mandatory dispatch.
+
 - Completion is a sticky workflow. If canonical state says continuation is required, the workflow root must keep advancing through mandatory roles until canonical state switches to `await_user_input`, `blocked`, `paused`, or `done`.
 - `continuation_policy == continue` means the workflow root must not stop after a slice or ask the user whether to continue. It must dispatch the next mandatory role directly.
 - `continuation_policy == await_user_input` means the workflow root must ask only for the exact missing input and then stop.

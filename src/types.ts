@@ -34,6 +34,7 @@ export type WorkflowSnapshot = {
 	plan: JsonRecord;
 	active: JsonRecord;
 	startupBrief: JsonRecord;
+	profile: JsonRecord;
 };
 
 export type CookHandoffCapsule = {
@@ -87,6 +88,14 @@ export type CookHandoffSidecar = {
 	last_start_error?: string;
 };
 
+export type DispatchInFlightInfo = {
+	role: CompletionRole;
+	slice_id: string | null;
+	head_sha: string;
+	claimed_at: string;
+	dispatch_key: string;
+};
+
 export type WorkflowDispatch = {
 	workspace_root: string;
 	role: CompletionRole | null;
@@ -101,5 +110,10 @@ export type WorkflowDispatch = {
 	workflow_closed?: boolean;
 	driver_continue?: boolean;
 	driver_continue_reason?: string;
+	dispatch_key?: string;
+	head_sha?: string;
+	slice_id?: string | null;
+	in_flight?: DispatchInFlightInfo | null;
+	claim_required?: boolean;
 	next_steps: string[];
 };

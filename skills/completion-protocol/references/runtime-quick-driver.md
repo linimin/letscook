@@ -20,6 +20,7 @@ Read current repo truth plus these canonical workflow inputs as needed:
 ## Driver rules
 
 - The main pi session is the workflow driver and dispatches at most one completion role at a time.
+- In Cursor: at most one in-flight Task per dispatch key; hooks remind, MCP claim authorizes dispatch.
 - Use `completion-bootstrapper` only for missing local helper or canonical-state repair.
 - Use `completion-regrounder` for canonical reconciliation, slice selection, post-review/audit reconciliation, and final stop reconciliation.
 - Use `completion_role` for all completion-* role work. Do not directly implement tracked product changes yourself while workflow is active.

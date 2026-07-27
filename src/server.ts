@@ -75,13 +75,20 @@ const TOOLS = [
 					type: "boolean",
 					description: "Force AskQuestion fallback even when MCP elicitation is available",
 				},
+				confirmation_action: {
+					type: "string",
+					enum: ["start", "start_on_main", "defer_worktree", "cancel", "edit"],
+					description:
+						"Record the user's AskQuestion choice without re-showing UI; required before start_cook_workflow on the AskQuestion path",
+				},
 			},
 			required: ["workspace_root"],
 		},
 	},
 	{
 		name: "start_cook_workflow",
-		description: "Confirm handoff and scaffold .agent/ workflow state (Cursor-native, no Pi)",
+		description:
+			"Scaffold .agent/ workflow state after handoff confirmation (requires sidecar status confirmed via confirm_cook_handoff)",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -89,6 +96,10 @@ const TOOLS = [
 				confirmation_id: { type: "string" },
 				action: { type: "string", enum: ["start", "cancel"] },
 				dry_run: { type: "boolean" },
+				isolation_choice: {
+					type: "string",
+					description: "Required on main checkout: pass main_checkout_acknowledged after confirm_cook_handoff",
+				},
 			},
 			required: ["workspace_root"],
 		},
@@ -205,10 +216,25 @@ const TOOLS = [
 	},
 	{
 		name: "get_workflow_dispatch",
-		description: "Read .agent/ and return the next mandatory completion role, cursor_agent name, and prompts",
+		description: "Read .agent/ and return the next mandatory completion role, cursor_agent name, and prompts (preflight only; call claim_workflow_dispatch before Task)",
 		inputSchema: {
 			type: "object",
 			properties: { workspace_root: { type: "string" } },
+			required: ["workspace_root"],
+		},
+	},
+	{
+		name: "claim_workflow_dispatch",
+		description: "Atomically claim the next mandatory dispatch key before launching a completion-role Task; prevents duplicate subagents",
+		inputSchema: {
+			type: "object",
+			properties: {
+				workspace_root: { type: "string" },
+				force: {
+					type: "boolean",
+					description: "Stall recovery only: re-claim completion-implementer when prior Task terminated and HEAD unchanged",
+				},
+			},
 			required: ["workspace_root"],
 		},
 	},
@@ -221,10 +247,14 @@ const TOOLS = [
 				workspace_root: { type: "string" },
 				role: { type: "string" },
 				raw_output: { type: "string" },
+				dispatch_key: {
+					type: "string",
+					description: "Active claim dispatch_key from claim_workflow_dispatch; required to bind submit to the current claim",
+				},
 				ok: { type: "boolean" },
 				structured: { type: "object" },
 			},
-			required: ["workspace_root", "role", "raw_output"],
+			required: ["workspace_root", "role", "raw_output", "dispatch_key"],
 		},
 	},
 	{

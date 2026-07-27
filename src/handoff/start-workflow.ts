@@ -1,7 +1,6 @@
 import { promises as fsp } from "node:fs";
 import * as path from "node:path";
-import { scaffoldWorkflowFromHandoff } from "../control-plane/state.ts";
-import { asString } from "../control-plane/state.ts";
+import { scaffoldWorkflowFromHandoff, loadWorkflowSnapshot, isWorkflowParked, isWorkflowActivelyRunning, asString } from "../control-plane/state.ts";
 import { getWorkflowDispatch } from "../orchestrator/dispatch.ts";
 import {
 	cancelPendingHandoff,
@@ -36,11 +35,26 @@ export async function startCookWorkflowFromHandoff(
 	if (!sidecar) throw new Error("no pending handoff sidecar");
 	if (sidecar.workspace_root !== resolvedRoot) throw new Error("workspace_root does not match sidecar");
 	if (sidecar.confirmation_id !== confirmationId) throw new Error("confirmation_id mismatch");
+	if (sidecar.status !== "confirmed") {
+		throw new Error("handoff not confirmed: call confirm_cook_handoff before start_cook_workflow");
+	}
 
-	await markHandoffConfirmed(resolvedRoot, confirmationId);
 	const capsule = await readHandoffCapsule(resolvedRoot);
 	if (options?.isolationChoice) {
 		capsule.isolation_choice = options.isolationChoice;
+	}
+	const existing = await loadWorkflowSnapshot(resolvedRoot);
+	if (existing) {
+		if (isWorkflowParked(existing)) {
+			throw new Error(
+				"workflow is parked: call resume_workflow to continue, or cancel_workflow before start_cook_workflow",
+			);
+		}
+		if (isWorkflowActivelyRunning(existing)) {
+			throw new Error(
+				"workflow already active: continue with get_workflow_dispatch or cancel_workflow before start_cook_workflow",
+			);
+		}
 	}
 	const projectName = path.basename(resolvedRoot);
 	const snapshot = await scaffoldWorkflowFromHandoff(resolvedRoot, capsule, projectName);
@@ -55,10 +69,10 @@ export async function startCookWorkflowFromHandoff(
 		monitoring: { enabled: true, mode: "cursor_subagent_loop" },
 		dispatch,
 		next_steps: [
-			"Call get_workflow_dispatch to fetch the first mandatory role",
-			"Invoke the bundled cursor_agent via Task/subagent delegation",
+			"Call get_workflow_dispatch for preflight on the first mandatory role",
+			"Call claim_workflow_dispatch before launching the bundled cursor_agent Task",
 			"Call submit_role_result when the agent completes",
-			"Repeat until dispatch.dispatch_allowed is false",
+			"Repeat until workflow is closed",
 		],
 	};
 }
