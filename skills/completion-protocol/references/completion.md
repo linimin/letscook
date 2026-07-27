@@ -59,7 +59,7 @@ Run basis regression selectively for eligible bugfix/regression slices. Use `bas
 - Use repo-local `.agent/current/tmp/` as the default completion scratch space.
 - Keep `.agent/current/tmp/` ignored in `.gitignore` with other non-contract `.agent/*` artifacts.
 - Avoid `/tmp` or `/private/tmp` unless a tool requires OS temp.
-- When OS temp is required, prefer `$TMPDIR/pi-completion/<repo-name>/`.
+- When OS temp is required, prefer `$TMPDIR/letscook-completion/<repo-name>/`.
 - Do not keep canonical state, required verification evidence, or the only copy of a deliverable only in scratch.
 
 ## Fixed Profile Schema

@@ -5,7 +5,7 @@ description: Shared completion workflow protocol for long-running coding tasks w
 
 # Completion Protocol
 
-> **Cursor adapter:** In letscook, the primary agent orchestrates via MCP (`get_workflow_dispatch`, `claim_workflow_dispatch`, `submit_role_result`) and bundled completion subagents — not Pi `completion_role` / `completion_emit_*` tools. Protocol truth in `.agent/**` and this skill is identical to pi-letscook.
+> **Cursor adapter:** In letscook, the primary agent orchestrates via MCP (`get_workflow_dispatch`, `claim_workflow_dispatch`, `submit_role_result`) and bundled completion subagents. Canonical protocol truth lives in `.agent/**` and this skill.
 
 Load this skill only after the user explicitly enters `/cook` and you are operating inside the `completion` workflow as the workflow driver or a completion role.
 
@@ -68,7 +68,7 @@ When the workflow driver is the Cursor primary agent (letscook MCP), enforce the
 - Use `completion-regrounder` for canonical re-grounding, slice selection, post-review or post-audit reconciliation, and final stop reconciliation.
 - Default scratch space for temporary files is repo-local `.agent/current/tmp/`.
 - Do not write scratch artifacts to `/tmp` or `/private/tmp` by default.
-- If a tool or platform behavior explicitly requires OS temp, prefer a scoped path such as `$TMPDIR/pi-completion/<repo-name>/` and treat it as disposable.
+- If a tool or platform behavior explicitly requires OS temp, prefer a scoped path such as `$TMPDIR/letscook-completion/<repo-name>/` and treat it as disposable.
 - Never keep canonical state, required verification evidence, or the only copy of a deliverable exclusively in temp paths.
 
 ## Primary Driver Contract
@@ -167,7 +167,7 @@ Run basis regression selectively for eligible bugfix or regression slices. Use `
 - Use `.agent/current/tmp/` for repo-local temporary files created during completion work.
 - `.agent/current/tmp/` is scratch space only. Do not treat it as canonical state or durable handoff storage.
 - Keep `.agent/current/tmp/` ignored in `.gitignore` alongside other non-contract `.agent/*` execution artifacts.
-- Use OS temp only when a tool explicitly requires it, and prefer `$TMPDIR/pi-completion/<repo-name>/` over broad `/tmp` usage.
+- Use OS temp only when a tool explicitly requires it, and prefer `$TMPDIR/letscook-completion/<repo-name>/` over broad `/tmp` usage.
 
 ## Compaction And Recovery
 

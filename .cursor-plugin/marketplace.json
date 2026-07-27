@@ -11,7 +11,7 @@
     {
       "name": "letscook",
       "source": ".",
-      "description": "MCP orchestrator, skills, hooks, and commands for pi-letscook-style workflows without Pi"
+      "description": "MCP orchestrator, skills, hooks, and commands for long-running completion workflows in Cursor"
     }
   ]
 }

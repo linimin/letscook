@@ -5,7 +5,7 @@ description: Prepare a cook_handoff for a Cursor-native workflow via letscook MC
 
 # Cursor handoff (letscook MCP)
 
-Use when planning is done in Cursor and the user wants a long-running completion workflow **without Pi**.
+Use when planning is done in Cursor and the user wants a long-running completion workflow.
 
 Optional **`cursor-worktree-cook`**: use Cursor `/worktree` when sandbox isolation is preferred.
 

@@ -12,5 +12,5 @@
 
 ## 0.3.0
 
-- pi-letscook protocol parity: startup synthesis, confirmation layout, mandatory dispatch, rubric transcription, control-plane defaults, and `release-check` gate.
+- Completion protocol: startup synthesis, confirmation layout, mandatory dispatch, rubric transcription, control-plane defaults, and `release-check` gate.
 - Cursor-specific: `/worktree`, MCP orchestration, elicitation + AskQuestion confirm.

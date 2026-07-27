@@ -1,6 +1,6 @@
 # letscook
 
-Cursor plugin + MCP orchestrator for the [pi-letscook](https://github.com/linimin/pi-letscook) completion protocol — **no Pi required**.
+Cursor plugin + MCP orchestrator for long-running, slice-based completion workflows in Cursor.
 
 Install the plugin once; it bundles MCP server, skills, commands, rules, and hooks.
 
@@ -74,7 +74,7 @@ Route B: Plan → Save to workspace → /cook → confirm (main isolation gate i
 | `resolve_cook_workspace` | Pick `workspace_root` for `/cook` |
 | `finish_cook_workflow` | Apply/delete guidance when done |
 | `prepare_cook_handoff` / `confirm_cook_handoff` / `start_cook_workflow` | Handoff + native confirm UI + scaffold `.agent/` |
-| `get_handoff_synthesis_prompt` / `submit_startup_analysis` / `synthesize_cook_handoff` / `validate_cook_handoff` | Startup synthesis (pi parity, fail-closed) |
+| `get_handoff_synthesis_prompt` / `submit_startup_analysis` / `synthesize_cook_handoff` / `validate_cook_handoff` | Startup synthesis (fail-closed) |
 | `list_cursor_plans` / `preview_plan_to_cook_handoff` | Plan → synthesis input |
 | `get_workflow_dispatch` / `claim_workflow_dispatch` / `submit_role_result` | Orchestrator loop (preflight → claim → Task → submit) |
 
@@ -90,7 +90,7 @@ npm run start   # MCP stdio (for manual debugging)
 
 ## Status
 
-**v0.4.0** — main checkout support with `confirm_cook_handoff` isolation gate (`start_on_main` / `defer_worktree`); optional `/worktree` (recommended, not required). Prior: pi-letscook protocol parity, MCP orchestration, elicitation + AskQuestion confirm.
+**v0.4.0** — main checkout support with `confirm_cook_handoff` isolation gate (`start_on_main` / `defer_worktree`); optional `/worktree` (recommended, not required). Prior: startup synthesis, MCP orchestration, elicitation + AskQuestion confirm.
 
 ## License
 

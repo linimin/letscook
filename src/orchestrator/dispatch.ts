@@ -45,7 +45,7 @@ function buildRoleSystemContext(snapshot: WorkflowSnapshot, role: CompletionRole
 	const mission = missionFromSnapshot(snapshot);
 	const lines = [
 		`COMPLETION ROLE: ${role}`,
-		`Protocol: pi-letscook / completion-workflow (Cursor-native orchestrator)`,
+		`Protocol: letscook / completion-workflow (Cursor-native orchestrator)`,
 		`Mission anchor: ${mission}`,
 		`Task type: ${asString(snapshot.state.task_type) ?? "completion-workflow"}`,
 		`Evaluation profile: ${asString(snapshot.state.evaluation_profile) ?? "completion-rubric-v1"}`,

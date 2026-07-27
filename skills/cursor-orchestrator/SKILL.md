@@ -5,7 +5,7 @@ description: Run a Cursor-native completion workflow via letscook MCP with bundl
 
 # Cursor-native completion workflow (letscook MCP)
 
-Use when the user wants a pi-letscook-style long-running workflow **without Pi**.
+Use when the user wants a long-running, slice-based completion workflow in Cursor.
 
 ## Bundled agents (plugin installs all six)
 
