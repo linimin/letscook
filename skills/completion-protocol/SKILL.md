@@ -63,7 +63,7 @@ When the workflow driver is the Cursor primary agent (letscook MCP), enforce the
 - `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
 - `/cook park` is available anytime an active workflow exists, including while `continuation_policy = continue`, to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits; resume still routes through canonical reground.
 - When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.
-- After canonical state reaches a closed `done` or `cancelled` posture, the extension may delete repo-local `.agent/` before control returns. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly. Do not recreate local helper files merely to narrate final status.
+- After canonical state reaches a closed `done` or `cancelled` posture, the orchestrator deletes the entire repo-local `.agent/` directory before control returns. It returns a closure receipt plus cleanup result first-class in the terminal tool response. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly. Do not recreate local helper files merely to narrate final status.
 - Use `completion-bootstrapper` only for first-time setup or missing local helper / canonical-state repair.
 - Use `completion-regrounder` for canonical re-grounding, slice selection, post-review or post-audit reconciliation, and final stop reconciliation.
 - Default scratch space for temporary files is repo-local `.agent/current/tmp/`.
@@ -115,7 +115,7 @@ Local helper files:
 - `.agent/verify_completion_stop.sh`
 - `.agent/verify_completion_control_plane.sh`
 
-These helper files are generated local convenience entrypoints, not tracked repo-contract files. After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.
+These helper files are generated local convenience entrypoints, not tracked repo-contract files. After a workflow reaches a closed `done` or `cancelled` posture, orchestrator cleanup removes the entire `.agent/` directory as expected closeout behavior.
 
 Ignored canonical execution-state files:
 

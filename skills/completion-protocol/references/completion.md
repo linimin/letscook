@@ -150,7 +150,7 @@ Rules:
 8. `/cook park` is available anytime an active workflow exists, including while `continuation_policy = continue`, to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits; resume still routes through canonical reground.
 9. When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.
 
-After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory before control returns. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly, and do not recreate local helper files merely to narrate final status.
+After a workflow reaches a closed `done` or `cancelled` posture, orchestrator cleanup removes the entire `.agent/` directory before control returns and includes the closure receipt plus cleanup result in the terminal tool response. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly, and do not recreate local helper files merely to narrate final status.
 
 `startup-brief.json` carries the confirmed `/cook` startup intake.
 

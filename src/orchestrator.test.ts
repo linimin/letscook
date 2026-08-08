@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
@@ -14,7 +15,9 @@ import {
 	submitRoleResult,
 } from "./orchestrator/dispatch.ts";
 import { buildDispatchKeyForContext } from "./orchestrator/dispatch-key.ts";
-import { scaffoldWorkflowFromHandoff } from "./control-plane/state.ts";
+import { scaffoldWorkflowFromHandoff, updateWorkflowState } from "./control-plane/state.ts";
+import { cleanupClosedWorkflow } from "./control-plane/cleanup.ts";
+import type { WorkflowDispatch, WorkflowSnapshot } from "./types.ts";
 
 function git(cwd: string, ...args: string[]) {
 	const result = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -47,7 +50,7 @@ async function scaffoldTestWorkflow(root: string) {
 function dispatchKeyFromClaim(claim: Awaited<ReturnType<typeof claimWorkflowDispatch>>): string {
 	const key = claim.dispatch_key;
 	assert.equal(typeof key, "string");
-	return key;
+	return key as string;
 }
 
 test("handoff schema validates minimal capsule", () => {
@@ -72,9 +75,10 @@ test("workflow scaffold and dispatch regrounder first", async () => {
 		assert.equal(dispatch.claim_required, true);
 		assert.ok(dispatch.dispatch_key);
 		const claim = await claimWorkflowDispatch({ workspace_root: root });
-		assert.equal(claim.dispatch?.dispatch_allowed, true);
-		assert.equal(claim.dispatch?.reason, "dispatch_claimed");
-		assert.equal(claim.dispatch?.dispatch_key, claim.dispatch_key);
+		const claimedDispatch = claim.dispatch as WorkflowDispatch;
+		assert.equal(claimedDispatch.dispatch_allowed, true);
+		assert.equal(claimedDispatch.reason, "dispatch_claimed");
+		assert.equal(claimedDispatch.dispatch_key, claim.dispatch_key);
 		const submitted = await submitRoleResult({
 			workspace_root: root,
 			role: "completion-regrounder",
@@ -203,7 +207,7 @@ test("stop-judge dispatch keys differ per remaining judge slot", () => {
 	const snapshot = {
 		state: { current_stop_wave_id: 1, remaining_stop_judges: 2 },
 		profile: { required_stop_judges: 2 },
-	} as import("../types.ts").WorkflowSnapshot;
+	} as unknown as WorkflowSnapshot;
 	const first = buildDispatchKeyForContext("completion-stop-judge", null, "abc123", snapshot);
 	const afterFirst = buildDispatchKeyForContext(
 		"completion-stop-judge",
@@ -212,7 +216,7 @@ test("stop-judge dispatch keys differ per remaining judge slot", () => {
 		{
 			...snapshot,
 			state: { ...snapshot.state, remaining_stop_judges: 1 },
-		} as import("../types.ts").WorkflowSnapshot,
+		} as unknown as WorkflowSnapshot,
 	);
 	assert.notEqual(first, afterFirst);
 });
@@ -330,6 +334,79 @@ test("cancel rejects while dispatch is in flight", async () => {
 		await scaffoldTestWorkflow(root);
 		await claimWorkflowDispatch({ workspace_root: root });
 		await assert.rejects(() => cancelWorkflow(root), /dispatch_in_flight/);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("cancel closes workflow and removes the entire .agent directory", async () => {
+	const root = await makeGitWorkflowRoot();
+	try {
+		await scaffoldTestWorkflow(root);
+		const cancelled = await cancelWorkflow(root, "test cancellation");
+		assert.equal(cancelled.workflow_closed, true);
+		assert.deepEqual(cancelled.cleanup, {
+			attempted: true,
+			removed: true,
+			path: path.join(root, ".agent"),
+		});
+		assert.equal(existsSync(path.join(root, ".agent")), false);
+		const dispatch = await getWorkflowDispatch(root);
+		assert.equal(dispatch.reason, "no_active_workflow");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("terminal role submission returns a closure receipt before removing .agent", async () => {
+	const root = await makeGitWorkflowRoot();
+	try {
+		await scaffoldTestWorkflow(root);
+		const claim = await claimWorkflowDispatch({ workspace_root: root });
+		await updateWorkflowState(root, {
+			workflow_entry_status: "done",
+			continuation_policy: "done",
+			project_done: true,
+			next_mandatory_role: null,
+		});
+		const submitted = await submitRoleResult({
+			workspace_root: root,
+			role: "completion-regrounder",
+			raw_output: "role: completion-regrounder\nverdict: ok\nsummary: final reconciliation complete",
+			dispatch_key: dispatchKeyFromClaim(claim),
+		});
+		assert.equal(submitted.workflow_closed, true);
+		assert.equal((submitted.cleanup as { removed?: boolean }).removed, true);
+		assert.equal((submitted.closure as { status?: string }).status, "done");
+		assert.equal(existsSync(path.join(root, ".agent")), false);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("cleanup fails closed for an unrelated .agent directory", async () => {
+	const root = await makeGitWorkflowRoot();
+	try {
+		await mkdir(path.join(root, ".agent", "current"), { recursive: true });
+		await writeFile(
+			path.join(root, ".agent", "current", "state.json"),
+			JSON.stringify({
+				workflow_entry_status: "done",
+				continuation_policy: "done",
+				project_done: true,
+				orchestrator: "another-tool",
+			}),
+			"utf8",
+		);
+		await writeFile(
+			path.join(root, ".agent", "profile.json"),
+			JSON.stringify({ protocol_id: "another-protocol" }),
+			"utf8",
+		);
+		const cleanup = await cleanupClosedWorkflow(root);
+		assert.equal(cleanup.removed, false);
+		assert.equal(cleanup.reason, "agent_directory_not_owned_by_completion_protocol");
+		assert.equal(existsSync(path.join(root, ".agent")), true);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

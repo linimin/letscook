@@ -8,6 +8,7 @@ import {
 	missionFromSnapshot,
 	updateWorkflowState,
 } from "../control-plane/state.ts";
+import { cleanupClosedWorkflow } from "../control-plane/cleanup.ts";
 import {
 	activeSliceId,
 	buildDispatchKey,
@@ -393,6 +394,21 @@ function applyRoleCompletionState(
 		last_role_completed_at: new Date().toISOString(),
 		dispatch_in_flight: null,
 	};
+	const snapshotAlreadyClosed =
+		asString(snapshot.state.workflow_entry_status) === "done" ||
+		asString(snapshot.state.workflow_entry_status) === "cancelled" ||
+		asString(snapshot.state.continuation_policy) === "done" ||
+		snapshot.state.project_done === true;
+	if (snapshotAlreadyClosed) {
+		return {
+			...patch,
+			project_done: true,
+			continuation_policy: "done",
+			next_mandatory_role: null,
+			next_mandatory_action: "Workflow complete",
+		};
+	}
+
 	let nextRole = mandatoryNextRoleAfterCompletion(role, snapshot, reportFields);
 
 	if (role === "completion-stop-judge") {
@@ -524,11 +540,22 @@ export async function submitRoleResult(input: SubmitRoleResultInput): Promise<Js
 		const statePatch = applyRoleCompletionState(input.role, snapshot, reportFields);
 		const updated = await updateWorkflowState(input.workspace_root, statePatch);
 		const dispatch = await getWorkflowDispatch(input.workspace_root);
+		const workflowClosed =
+			updated.state.project_done === true ||
+			asString(updated.state.continuation_policy) === "done" ||
+			asString(updated.state.workflow_entry_status) === "done" ||
+			asString(updated.state.workflow_entry_status) === "cancelled";
 
 		const driverContinue =
 			dispatch.dispatch_allowed === true &&
 			dispatch.workflow_closed !== true &&
 			(dispatch.continuation_policy === "continue" || !dispatch.continuation_policy);
+		const cleanup = workflowClosed
+			? await cleanupClosedWorkflow(
+					input.workspace_root,
+					asString(updated.state.workflow_session_id),
+				)
+			: undefined;
 
 		return {
 			ok: true,
@@ -536,13 +563,22 @@ export async function submitRoleResult(input: SubmitRoleResultInput): Promise<Js
 			transcript,
 			state_patch: statePatch,
 			next_mandatory_role: asString(updated.state.next_mandatory_role),
-			workflow_closed: updated.state.project_done === true,
+			workflow_closed: workflowClosed,
+			closure: workflowClosed
+				? {
+						status: asString(updated.state.workflow_entry_status) ?? "done",
+						workflow_session_id: asString(updated.state.workflow_session_id),
+						head_sha: headSha ?? null,
+						reason: asString(updated.state.continuation_reason) ?? "workflow_complete",
+					}
+				: undefined,
+			cleanup,
 			driver_continue: driverContinue,
 			driver_continue_reason: driverContinue
 				? "continuation_policy requires preflight + claim before next dispatch"
 				: undefined,
-		dispatch,
-	};
+			dispatch,
+		};
 }
 
 export async function parkWorkflow(workspaceRoot: string, reason?: string): Promise<JsonRecord> {
@@ -600,7 +636,20 @@ export async function cancelWorkflow(workspaceRoot: string, reason?: string): Pr
 		continuation_reason: reason ?? "Cancelled via letscook MCP",
 		dispatch_in_flight: null,
 	});
-	return { ok: true, state: updated.state };
+	const cleanup = await cleanupClosedWorkflow(
+		workspaceRoot,
+		asString(updated.state.workflow_session_id),
+	);
+	return {
+		ok: true,
+		workflow_closed: true,
+		closure: {
+			status: "cancelled",
+			workflow_session_id: asString(updated.state.workflow_session_id),
+			reason: asString(updated.state.continuation_reason),
+		},
+		cleanup,
+	};
 }
 
 export async function readWorkflowEvents(workspaceRoot: string): Promise<JsonRecord[]> {

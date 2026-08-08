@@ -203,7 +203,10 @@ test("AskQuestion start path confirms before start_cook_workflow", async () => {
 		const { confirmationId } = await writeCookHandoffFile(root, capsule, { workspace_root: root });
 		const fallback = await confirmCookHandoff(root, {}, { skip_elicitation: true });
 		assert.equal(fallback.user_action_required, "ask_question");
-		assert.match(String(fallback.next_steps?.[1] ?? ""), /confirmation_action: 'start'/);
+		assert.match(
+			String((fallback.next_steps as string[] | undefined)?.[1] ?? ""),
+			/confirmation_action: 'start'/,
+		);
 
 		const confirmed = await confirmCookHandoff(root, {}, {
 			skip_elicitation: true,
