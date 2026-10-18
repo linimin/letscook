@@ -29,7 +29,7 @@ Use when the user wants a long-running, slice-based completion workflow in Curso
    - `slice-history.jsonl` has no successful record for the same `dispatch_key`
    - `.agent/current/state.json` `next_mandatory_role` still equals `dispatch.role`
 5. `claim_workflow_dispatch({ workspace_root })` — **only** MCP call that authorizes a Task
-6. Invoke **one** bundled `cursor_agent` Task with `system_context` + `task_prompt` from the claim response
+6. Invoke **one** Task whose `subagent_type` is `dispatch.subagent_type` (the bundled agent name, such as `completion-reviewer`). Pass `system_context` + `task_prompt` from the claim response. Do not use `generalPurpose`.
 7. `submit_role_result({ workspace_root, role, raw_output, dispatch_key })` — `dispatch_key` must match the active claim; clears `dispatch_in_flight`
 8. Repeat from step 3 until `workflow_closed` or user parks/cancels
 9. `finish_cook_workflow` → guide `/apply-worktree` and `/delete-worktree`
@@ -55,7 +55,7 @@ Use when the user wants a long-running, slice-based completion workflow in Curso
 - Always thread the same `workspace_root` (Cursor worktree checkout).
 - Never guess `next_mandatory_role`; always use MCP dispatch/submit responses.
 - When `driver_continue: true` after **submit**, preflight + claim the next role without asking the user — but never skip claim.
-- Dispatch the **named bundled agent** (`cursor_agent`), not a generic assistant.
+- Dispatch the **named bundled agent**: Task `subagent_type` is `dispatch.cursor_agent` / `dispatch.subagent_type`. `subagentStop` only matches those `completion-*` names.
 - Evaluator agents (reviewer, auditor, stop-judge) must stay read-only.
 - Never call `claim_workflow_dispatch` twice for the same `dispatch_key` without an intervening `submit_role_result`.
 

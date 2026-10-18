@@ -37,6 +37,11 @@ Consistency rules:
 - Never combine `Acceptable as-is: yes` with any real follow-up work.
 - Never write `none; ...actual follow-up...`.
 
+Routing is owned by the orchestrator, not by this report:
+
+- `Acceptable as-is: no` skips the auditor. `completion-regrounder` reopens this slice or cuts the follow-up slice you named.
+- `Acceptable as-is: yes` still goes to a fresh `completion-auditor` that reads the whole project. Keep `Smallest follow-up slice` as `none`.
+
 Always emit the shared rubric section before findings. Use these exact rubric dimension names and verdict words, and include all four lines even when every dimension is `pass`:
 
 - `Rubric:`

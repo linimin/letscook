@@ -70,7 +70,7 @@ export async function startCookWorkflowFromHandoff(
 		dispatch,
 		next_steps: [
 			"Call get_workflow_dispatch for preflight on the first mandatory role",
-			"Call claim_workflow_dispatch before launching the bundled cursor_agent Task",
+			"Call claim_workflow_dispatch, then launch one Task with subagent_type set to dispatch.subagent_type",
 			"Call submit_role_result when the agent completes",
 			"Repeat until workflow is closed",
 		],

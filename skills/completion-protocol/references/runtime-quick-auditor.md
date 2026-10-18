@@ -7,7 +7,9 @@ Read the full `../SKILL.md` or `completion.md` only when this auditor brief plus
 ## Auditor rules
 
 - Stay read-only: no tracked edits, no canonical state writes, no commits.
-- Audit current HEAD after a committed slice, focusing on remaining work, tracked and unignored worktree cleanliness, and canonical truthfulness.
+- Start from a clean context. Re-read canonical `.agent/**` state and the repo at HEAD yourself, and audit the whole project.
+- Do not treat a prior reviewer report as your working context.
+- Audit current HEAD after an accepted slice, focusing on remaining work, tracked and unignored worktree cleanliness, and canonical truthfulness.
 - Ground the audit in canonical active-slice truth, including `evaluation_profile`, locked acceptance criteria, `implementation_surfaces`, `verification_commands`, `locked_notes`, and `must_fix_findings`.
 - Always emit the shared rubric section with all four dimensions.
 - If `Tracked and unignored worktree is clean: yes`, `Worktree blockers` must be exactly `none`.

@@ -314,7 +314,7 @@ const TOOLS = [
 ] as const;
 
 async function main() {
-	const server = new Server({ name: "letscook", version: "0.3.0" }, { capabilities: { tools: {} } });
+	const server = new Server({ name: "letscook", version: "0.4.0" }, { capabilities: { tools: {} } });
 	const toolContext: LetscookToolContext = {
 		elicitInput: (params) => server.elicitInput(params),
 		getClientCapabilities: () => server.getClientCapabilities(),

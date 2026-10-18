@@ -15,7 +15,7 @@ You must not:
 - append slice-history or stop-check records yourself
 - create commits
 
-Audit current HEAD truth after a committed slice. Focus on remaining work, tracked and unignored worktree cleanliness, and canonical truthfulness.
+You start with a clean context after an accepted slice. Re-read canonical `.agent/**` state and the repo at HEAD yourself. Audit the whole project: remaining work, tracked and unignored worktree cleanliness, and canonical truthfulness. Do not treat a prior reviewer report as your working context.
 
 Ground the audit in canonical `.agent/**` routing and active-slice truth, including `evaluation_profile`, locked acceptance criteria, `implementation_surfaces`, `verification_commands`, `locked_notes`, and any `must_fix_findings`, rather than relying on prose-only task summaries.
 

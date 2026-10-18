@@ -23,6 +23,8 @@ Read current repo truth plus these canonical workflow inputs as needed:
 - In Cursor: at most one in-flight Task per dispatch key; hooks remind, MCP claim authorizes dispatch.
 - Use `completion-bootstrapper` only for missing local helper or canonical-state repair.
 - Use `completion-regrounder` for canonical reconciliation, slice selection, post-review/audit reconciliation, and final stop reconciliation.
+- If the latest review for the committed slice is `Acceptable as-is: no`, skip `completion-auditor` and dispatch `completion-regrounder` to reopen that slice or cut the follow-up slice.
+- If that review is `Acceptable as-is: yes`, still dispatch a fresh `completion-auditor` to read the whole project before the next slice.
 - Use `completion_role` for all completion-* role work. Do not directly implement tracked product changes yourself while workflow is active.
 - `continuation_policy = continue` means keep dispatching mandatory roles.
 - `requires_reground = true` plus `next_mandatory_role = completion-regrounder` is still a continue-state handoff when canonical reconciliation can proceed without new user input.

@@ -67,6 +67,46 @@ function sliceHasAudit(snapshot: WorkflowSnapshot, sliceId: string): boolean {
 	return asString(record?.slice_id) === sliceId || Boolean(record && asString(record.verdict));
 }
 
+function latestRoleRecordForSlice(snapshot: WorkflowSnapshot, role: string, sliceId: string): JsonRecord | undefined {
+	try {
+		const raw = fs.readFileSync(snapshot.files.sliceHistoryPath, "utf8");
+		const lines = raw.split("\n").filter(Boolean);
+		for (let i = lines.length - 1; i >= 0; i -= 1) {
+			const parsed = JSON.parse(lines[i]!) as JsonRecord;
+			if (asString(parsed.role) !== role) continue;
+			if (asString(parsed.slice_id) !== sliceId) continue;
+			return parsed;
+		}
+	} catch {
+		// ignore
+	}
+	return undefined;
+}
+
+function reviewRejectsSlice(snapshot: WorkflowSnapshot, sliceId: string): boolean {
+	const record = latestRoleRecordForSlice(snapshot, "completion-reviewer", sliceId);
+	const fields = record?.report_fields;
+	if (!fields || typeof fields !== "object") return false;
+	const acceptable = asString((fields as JsonRecord)["Acceptable as-is"]);
+	return Boolean(acceptable?.toLowerCase().startsWith("no"));
+}
+
+function rejectedReviewDispatch(): MandatoryDispatchResult {
+	return {
+		role: "completion-regrounder",
+		action: "Reopen the rejected slice or cut the follow-up slice from the latest review",
+		reason: "review_rejected",
+	};
+}
+
+function missingAuditDispatch(): MandatoryDispatchResult {
+	return {
+		role: "completion-auditor",
+		action: "Audit the whole project at HEAD after the accepted slice",
+		reason: "missing_audit",
+	};
+}
+
 export type MandatoryDispatchResult = {
 	role: CompletionRole | null;
 	action: string;
@@ -119,11 +159,8 @@ export function resolveMandatoryDispatch(snapshot: WorkflowSnapshot): MandatoryD
 			};
 		}
 		if (!sliceHasAudit(snapshot, sliceId)) {
-			return {
-				role: "completion-auditor",
-				action: "Audit the latest committed slice and project truth",
-				reason: "missing_audit",
-			};
+			if (reviewRejectsSlice(snapshot, sliceId)) return rejectedReviewDispatch();
+			return missingAuditDispatch();
 		}
 		return {
 			role: "completion-regrounder",
@@ -154,7 +191,8 @@ export function resolveMandatoryDispatch(snapshot: WorkflowSnapshot): MandatoryD
 		return { role: "completion-reviewer", action: "Review latest commit", reason: "missing_review" };
 	}
 	if (committedId && !sliceHasAudit(snapshot, committedId)) {
-		return { role: "completion-auditor", action: "Audit latest commit", reason: "missing_audit" };
+		if (reviewRejectsSlice(snapshot, committedId)) return rejectedReviewDispatch();
+		return missingAuditDispatch();
 	}
 
 	return {
@@ -189,6 +227,12 @@ export function mandatoryNextRoleAfterCompletion(
 	if (role === "completion-regrounder") {
 		const activeStatus = asString(snapshot.active.status)?.toLowerCase();
 		if (activeStatus === "selected" || activeStatus === "in_progress") return "completion-implementer";
+	}
+
+	if (role === "completion-reviewer") {
+		const acceptable = asString(reportFields["Acceptable as-is"])?.toLowerCase();
+		if (acceptable?.startsWith("no")) return "completion-regrounder";
+		if (acceptable?.startsWith("yes")) return "completion-auditor";
 	}
 
 	if (!nextRole) return null;

@@ -101,8 +101,8 @@ If the workflow driver detects that the next mandatory action belongs to a compl
 3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/current/plan.json` and return the next exact handoff payload.
 4. If a slice is `selected` or `in_progress` and no new slice commit exists yet, invoke `completion-implementer`.
 5. If the latest committed slice lacks a review result, invoke `completion-reviewer`.
-6. If the latest committed slice lacks an audit result, invoke `completion-auditor`.
-7. If review or audit have returned and canonical reconciliation is needed, invoke `completion-regrounder`. `completion-regrounder` must not select or hand off a next slice while the latest committed slice leaves the tracked and unignored worktree dirty; instead it must reopen or continue that latest slice for reconciliation.
+6. If the latest review for the committed slice is `Acceptable as-is: no`, skip `completion-auditor` and invoke `completion-regrounder` to reopen that slice or cut the follow-up slice. Otherwise, if the latest committed slice lacks an audit result, invoke a fresh `completion-auditor` to read the whole project at HEAD.
+7. If an accepted review has been audited, or a rejected review skipped audit, and canonical reconciliation is needed, invoke `completion-regrounder`. `completion-regrounder` must not select or hand off a next slice while the latest committed slice leaves the tracked and unignored worktree dirty; instead it must reopen or continue that latest slice for reconciliation.
 8. If all planned slices are done and final closure is being evaluated, invoke the required `completion-stop-judge` sessions directly.
 9. After each required current-HEAD `completion-stop-judge` result for the current `current_stop_wave_id` is faithfully recorded, rerun `bash .agent/verify_completion_stop.sh` and invoke `completion-regrounder` for final stop reconciliation.
 

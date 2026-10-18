@@ -1,8 +1,7 @@
 {
   "name": "letscook",
-  "displayName": "Letscook",
   "description": "Cursor-native completion workflow orchestrator with six bundled completion agents",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": { "name": "linimin" },
   "license": "MIT",
   "keywords": ["cook", "workflow", "mcp", "orchestrator", "completion"],

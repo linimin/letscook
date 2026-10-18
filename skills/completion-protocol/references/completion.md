@@ -389,8 +389,8 @@ It must not, while a slice is selected or in progress:
 3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/current/plan.json` and return the next exact handoff payload.
 4. If a slice is `selected` or `in_progress` and no new commit exists for it yet, invoke `completion-implementer`.
 5. If the latest committed slice lacks review, invoke `completion-reviewer`.
-6. If the latest committed slice lacks audit, invoke `completion-auditor`.
-7. If canonical reconciliation is needed after review or audit, invoke `completion-regrounder`.
+6. If the latest review for the committed slice is `Acceptable as-is: no`, skip `completion-auditor` and invoke `completion-regrounder` to reopen that slice or cut the follow-up slice. Otherwise, if the latest committed slice lacks audit, invoke a fresh `completion-auditor` to read the whole project at HEAD.
+7. If an accepted review has been audited, or a rejected review skipped audit, and canonical reconciliation is needed, invoke `completion-regrounder`.
 8. If all slices are done and final closure is under evaluation, invoke the required `completion-stop-judge` sessions directly.
 9. After the required current-HEAD judgments are recorded, rerun `bash .agent/verify_completion_stop.sh` and invoke `completion-regrounder` for final stop reconciliation.
 

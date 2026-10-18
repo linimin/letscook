@@ -54,7 +54,7 @@ Route B: Plan → Save to workspace → /cook → confirm (main isolation gate i
 
 | Component | Location |
 |-----------|----------|
-| MCP `letscook` | `mcp.json` + `scripts/start-letscook-mcp.sh` |
+| MCP `letscook` | `mcp.json` (`${CURSOR_PLUGIN_ROOT}`) + `scripts/start-letscook-mcp.sh` |
 | **6 completion agents** | `agents/completion-*.md` |
 | Skill `cursor-worktree-cook` | `skills/cursor-worktree-cook/` |
 | Skill `cursor-handoff-synthesis` | `skills/cursor-handoff-synthesis/` |

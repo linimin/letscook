@@ -33,6 +33,7 @@ Read current repo truth plus these canonical workflow inputs as needed:
 - Completion roles do not invoke other completion roles.
 - `completion-bootstrapper` is only for missing local helper or canonical-state repair.
 - `completion-regrounder` owns canonical reconciliation, slice selection, post-review/audit reconciliation, and final stop reconciliation.
+- A review of `Acceptable as-is: no` skips `completion-auditor` and returns to `completion-regrounder`. A review of `Acceptable as-is: yes` still gets a fresh whole-project `completion-auditor` before the next slice.
 - `completion-implementer` owns exactly one selected slice end to end, including the commit.
 - `completion-reviewer`, `completion-auditor`, and `completion-stop-judge` are read-only.
 

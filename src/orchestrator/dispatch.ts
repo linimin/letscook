@@ -93,6 +93,15 @@ function buildRoleTaskPrompt(snapshot: WorkflowSnapshot, role: CompletionRole): 
 	if (role === "completion-implementer") {
 		parts.push("", "Implement the active slice, run verification commands, and land one commit for the slice.");
 	}
+	if (role === "completion-auditor") {
+		parts.push(
+			"",
+			"This is a fresh audit of the whole project at HEAD.",
+			"Re-read canonical .agent/** state and repo truth yourself.",
+			"Do not treat a prior reviewer report as your working context.",
+			"State why the project is still not done, whether the backlog is truthful, and whether the tracked worktree is clean.",
+		);
+	}
 	return parts.join("\n");
 }
 
@@ -233,13 +242,13 @@ function buildReadyDispatch(
 	const nextSteps = dispatchAllowed
 		? options?.claimed
 			? [
-					`Invoke bundled agent "${role}" from the letscook plugin (Task/subagent delegation)`,
+					`Invoke one Task with subagent_type "${role}" (not generalPurpose)`,
 					`Pass system_context + task_prompt in the invocation`,
 					`After the agent completes, call submit_role_result({ workspace_root, role: "${role}", raw_output })`,
 				]
 			: [
 					`Call claim_workflow_dispatch({ workspace_root }) before dispatching Task`,
-					`Then invoke bundled agent "${role}" with system_context + task_prompt`,
+					`Then invoke one Task with subagent_type "${role}" (not generalPurpose) and system_context + task_prompt`,
 					`After the agent completes, call submit_role_result({ workspace_root, role: "${role}", raw_output })`,
 				]
 		: reason === "role_in_flight"

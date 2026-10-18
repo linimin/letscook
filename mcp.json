@@ -2,8 +2,8 @@
   "mcpServers": {
     "letscook": {
       "command": "bash",
-      "args": ["scripts/start-letscook-mcp.sh"],
-      "env": {}
+      "args": ["${CURSOR_PLUGIN_ROOT}/scripts/start-letscook-mcp.sh"],
+      "cwd": "${CURSOR_PLUGIN_ROOT}"
     }
   }
 }

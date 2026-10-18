@@ -4,7 +4,7 @@
     "postToolUse": [
       {
         "command": "./hooks/cook-post-mcp-continue.sh",
-        "matcher": "MCP"
+        "matcher": "MCP:.*(submit_role_result|claim_workflow_dispatch|get_workflow_dispatch|confirm_cook_handoff|start_cook_workflow)"
       }
     ],
     "subagentStop": [

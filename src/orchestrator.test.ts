@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -15,7 +15,7 @@ import {
 	submitRoleResult,
 } from "./orchestrator/dispatch.ts";
 import { buildDispatchKeyForContext } from "./orchestrator/dispatch-key.ts";
-import { scaffoldWorkflowFromHandoff, updateWorkflowState } from "./control-plane/state.ts";
+import { loadWorkflowSnapshot, scaffoldWorkflowFromHandoff, updateWorkflowState } from "./control-plane/state.ts";
 import { cleanupClosedWorkflow } from "./control-plane/cleanup.ts";
 import type { WorkflowDispatch, WorkflowSnapshot } from "./types.ts";
 
@@ -490,6 +490,96 @@ test("implementer submit accepts head change after slice commit", async () => {
 		assert.equal(submitted.ok, true);
 		const dispatch = await getWorkflowDispatch(root);
 		assert.notEqual(dispatch.reason, "role_in_flight");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+async function markSliceCommittedForReview(root: string, sliceId: string) {
+	const head = git(root, "rev-parse", "HEAD");
+	const activePath = path.join(root, ".agent", "current", "active-slice.json");
+	const active = JSON.parse(await readFile(activePath, "utf8")) as Record<string, unknown>;
+	active.status = "in_progress";
+	active.slice_id = sliceId;
+	active.basis_commit = head;
+	active.goal = "Fix the redirect";
+	await writeFile(activePath, JSON.stringify(active), "utf8");
+	await updateWorkflowState(root, {
+		requires_reground: false,
+		current_phase: "review",
+		continuation_policy: "continue",
+		next_mandatory_role: "completion-reviewer",
+		next_mandatory_action: "Review the latest committed slice",
+	});
+}
+
+function reviewerReport(acceptable: "yes" | "no", advisoryRole: string): string {
+	const followUp = acceptable === "yes" ? "none" : "reopen auth-redirect and fix the redirect check";
+	return [
+		"MISSION ANCHOR: Add login redirect handling and tests",
+		"Remaining contract IDs: redirect",
+		"Rubric:",
+		"- Contract coverage: pass - criteria covered",
+		`- Correctness risk: ${acceptable === "yes" ? "pass - no defect" : "fail - redirect check is wrong"}`,
+		"- Verification evidence: pass - commands recorded",
+		"- Docs/state parity: pass - state matches",
+		`Findings: ${acceptable === "yes" ? "none" : "redirect check rejects the return path"}`,
+		`Acceptable as-is: ${acceptable}`,
+		`Smallest follow-up slice: ${followUp}`,
+		`recommended_next_role: ${advisoryRole}`,
+	].join("\n");
+}
+
+test("rejected review skips auditor and redispatches regrounder", async () => {
+	const root = await makeGitWorkflowRoot();
+	try {
+		await scaffoldTestWorkflow(root);
+		await markSliceCommittedForReview(root, "auth-redirect");
+		const claim = await claimWorkflowDispatch({ workspace_root: root });
+		const submitted = await submitRoleResult({
+			workspace_root: root,
+			role: "completion-reviewer",
+			raw_output: reviewerReport("no", "completion-auditor"),
+			dispatch_key: dispatchKeyFromClaim(claim),
+		});
+		assert.equal(submitted.next_mandatory_role, "completion-regrounder");
+
+		await updateWorkflowState(root, { next_mandatory_role: null });
+		const dispatch = await getWorkflowDispatch(root);
+		assert.equal(dispatch.role, "completion-regrounder");
+		const snapshot = await loadWorkflowSnapshot(root);
+		assert.equal(
+			snapshot?.state.next_mandatory_action,
+			"Reopen the rejected slice or cut the follow-up slice from the latest review",
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("accepted review still dispatches a fresh whole-project auditor", async () => {
+	const root = await makeGitWorkflowRoot();
+	try {
+		await scaffoldTestWorkflow(root);
+		await markSliceCommittedForReview(root, "auth-redirect");
+		const claim = await claimWorkflowDispatch({ workspace_root: root });
+		const submitted = await submitRoleResult({
+			workspace_root: root,
+			role: "completion-reviewer",
+			raw_output: reviewerReport("yes", "completion-regrounder"),
+			dispatch_key: dispatchKeyFromClaim(claim),
+		});
+		assert.equal(submitted.next_mandatory_role, "completion-auditor");
+
+		await updateWorkflowState(root, { next_mandatory_role: null });
+		const dispatch = await getWorkflowDispatch(root);
+		assert.equal(dispatch.role, "completion-auditor");
+		assert.match(dispatch.task_prompt, /fresh audit of the whole project/);
+		const snapshot = await loadWorkflowSnapshot(root);
+		assert.equal(
+			snapshot?.state.next_mandatory_action,
+			"Audit the whole project at HEAD after the accepted slice",
+		);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
